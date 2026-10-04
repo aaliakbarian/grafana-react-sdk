@@ -1,0 +1,51 @@
+{
+  "name": "grafana-react-sdk-poc-root",
+  "version": "0.0.0-poc",
+  "private": true,
+  "description": "Disposable private research workspace for the Grafana native-rendering POC.",
+  "packageManager": "yarn@4.17.1",
+  "engines": {
+    "node": "22.23.3"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "install:poc": "yarn install --immutable",
+    "typecheck": "yarn workspace @grafana-react-sdk/poc-host typecheck && yarn workspace @grafana-react-sdk/poc-compat typecheck && yarn workspace @grafana-react-sdk/poc-grafana-bridge typecheck",
+    "test:unit": "vitest run packages/poc-compat/src/toolchain.test.ts --environment node",
+    "test:integration": "vitest run integration --environment node --passWithNoTests",
+    "test:e2e": "playwright test tests/e2e --pass-with-no-tests",
+    "build:poc": "tsc6 -b tsconfig.base.json --pretty false",
+    "inspect:bundle": "yarn build:poc && node --eval 'const fs = require(\"node:fs\"); const path = require(\"node:path\"); const banned = /public\\/app\\/app(?:\\.ts)?|GrafanaApp\\.init/; const hits = []; const walk = (dir) => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { const file = path.join(dir, entry.name); if (entry.isDirectory()) walk(file); else if (/\\.[cm]?[jt]sx?$/.test(entry.name) && banned.test(fs.readFileSync(file, \"utf8\"))) hits.push(file); } }; for (const root of [\"apps\", \"packages\"]) walk(root); if (hits.length) { console.error(`Forbidden Grafana application-shell import found:\\n${hits.join(\"\\n\")}`); process.exit(1); } console.log(\"No forbidden Grafana application-shell imports found.\");'"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.1",
+    "@playwright/test": "1.56.1",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.1.1",
+    "playwright-core": "1.56.1",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vite": "8.2.0",
+    "vitest": "4.1.10"
+  },
+  "resolutions": {
+    "@emotion/css": "11.13.5",
+    "@emotion/react": "11.14.0",
+    "@grafana/data": "13.2.3",
+    "@grafana/e2e-selectors": "13.2.3",
+    "@grafana/i18n": "13.2.3",
+    "@grafana/runtime": "13.2.3",
+    "@grafana/scenes": "8.13.5",
+    "@grafana/schema": "13.2.3",
+    "@grafana/ui": "13.2.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "6.30.3",
+    "rxjs": "7.8.2",
+    "uplot": "1.6.32"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@grafana-react-sdk/poc-grafana-bridge",
+  "version": "0.0.0-poc",
+  "private": true,
+  "description": "Disposable private boundary for pinned Grafana application-source research; never publish.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc6 -b --pretty false",
+    "typecheck": "tsc6 --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@emotion/css": "11.13.5",
+    "@emotion/react": "11.14.0",
+    "@grafana/data": "13.2.3",
+    "@grafana/e2e-selectors": "13.2.3",
+    "@grafana/i18n": "13.2.3",
+    "@grafana/runtime": "13.2.3",
+    "@grafana/scenes": "8.13.5",
+    "@grafana/schema": "13.2.3",
+    "@grafana/ui": "13.2.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "6.30.3",
+    "rxjs": "7.8.2",
+    "uplot": "1.6.32"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4"
+  }
+}

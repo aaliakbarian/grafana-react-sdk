@@ -1,0 +1,22 @@
+{
+  "name": "@grafana-react-sdk/poc-host",
+  "version": "0.0.0-poc",
+  "private": true,
+  "description": "Disposable private React host for native-rendering research; never publish.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc6 -b --pretty false",
+    "typecheck": "tsc6 --noEmit --pretty false"
+  },
+  "dependencies": {
+    "@grafana-react-sdk/poc-compat": "workspace:*",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.1.1",
+    "vite": "8.2.0"
+  }
+}
