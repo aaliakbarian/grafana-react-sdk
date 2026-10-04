@@ -5,6 +5,7 @@
     "rootDir": ".",
     "tsBuildInfoFile": "./dist/poc-host.tsbuildinfo",
     "types": [
+      "node",
       "vite/client"
     ]
   },

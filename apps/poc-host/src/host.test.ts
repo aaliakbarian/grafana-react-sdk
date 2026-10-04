@@ -22,12 +22,14 @@ describe('standalone POC host contract', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
     };
 
     expect(manifest.dependencies).not.toHaveProperty('react-router');
     expect(manifest.dependencies).not.toHaveProperty('react-router-dom');
     expect(manifest.devDependencies).not.toHaveProperty('react-router');
     expect(manifest.devDependencies).not.toHaveProperty('react-router-dom');
+    expect(manifest.scripts?.dev).not.toMatch(/--host\b/);
   });
 
   it('deduplicates the shared runtime and exposes a credential-neutral Grafana proxy', async () => {
@@ -72,7 +74,12 @@ describe('standalone POC host contract', () => {
     );
 
     const proxy = module.default.server?.proxy?.['/grafana'];
-    expect(module.default.server).toMatchObject({ host: 'localhost', port: 5173 });
+    if (process.env.POC_VITE_HOST === undefined) {
+      expect(module.default.server).toMatchObject({ host: 'localhost', port: 5173 });
+    } else {
+      expect(process.env.POC_VITE_HOST).toBe('0.0.0.0');
+      expect(module.default.server).toMatchObject({ host: '0.0.0.0', port: 5173 });
+    }
     expect(proxy).toMatchObject({
       target: 'http://127.0.0.1:3000',
       changeOrigin: false,

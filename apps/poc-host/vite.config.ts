@@ -20,7 +20,7 @@ export default defineConfig({
     ],
   },
   server: {
-    host: 'localhost',
+    host: process.env.POC_VITE_HOST ?? 'localhost',
     port: 5173,
     strictPort: true,
     proxy: {

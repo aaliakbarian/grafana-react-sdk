@@ -1,0 +1,33 @@
+name: grafana-react-sdk-poc
+
+services:
+  dev:
+    image: grafana-react-sdk-poc-dev:local
+    build:
+      context: .
+      dockerfile: dev/container/Dockerfile
+      args:
+        PLAYWRIGHT_VERSION: "1.56.1"
+    init: true
+    working_dir: /workspace
+    environment:
+      HOME: /tmp/poc-home
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      POC_VITE_HOST: 0.0.0.0
+      YARN_GLOBAL_FOLDER: /var/cache/yarn
+    volumes:
+      - .:/workspace
+      - poc-node-modules:/workspace/node_modules
+      - poc-yarn-cache:/var/cache/yarn
+    ports:
+      - "127.0.0.1:5173:5173"
+    shm_size: 1gb
+    command:
+      - yarn
+      - workspace
+      - "@grafana-react-sdk/poc-host"
+      - dev
+
+volumes:
+  poc-node-modules:
+  poc-yarn-cache:

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc6 -b --pretty false && vite build",
     "build:app": "vite build",
-    "dev": "vite --host localhost --port 5173 --strictPort",
+    "dev": "vite --port 5173 --strictPort",
     "typecheck": "tsc6 --noEmit --pretty false"
   },
   "dependencies": {

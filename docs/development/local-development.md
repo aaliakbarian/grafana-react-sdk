@@ -2,49 +2,83 @@
 
 ## Current state
 
-The repository contains the private workspace foundation for the disposable native-rendering POC. It does not yet contain a runnable React host, Grafana runtime initialization, dashboard loading, panel rendering, datasource integration, or Docker configuration.
+The repository contains a runnable private React host and a containerized development environment for the disposable native-rendering POC. It does not yet contain the Grafana fixture, Grafana runtime initialization, dashboard loading, panel rendering, or datasource integration.
 
 All POC packages are private research workspaces and must not be published. Passing POC code does not automatically become production SDK code.
 
 ## Prerequisites
 
-Use:
+The default workflow requires only:
 
 - Git;
-- Node.js `22.23.3`;
-- Corepack with Yarn `4.17.1`; and
-- a text editor with Markdown and TypeScript support.
+- Docker with Docker Compose;
+- VS Code or Codex; and
+- a repository checkout on the WSL Linux filesystem.
 
-Docker and a Grafana instance are not required until the dedicated environment task.
+Node.js, npm, Yarn, TypeScript, Vite, Vitest, Playwright, Chromium, and native browser dependencies are supplied by the development image. They are not required on the WSL host. A Grafana service is intentionally absent until Task 3.
 
-## Install
+## Container-first setup
 
 From the repository root:
 
 ```bash
-corepack enable
-corepack yarn install --immutable
+docker compose build dev
+docker compose run --rm dev yarn install --immutable
 ```
 
-The first lockfile-generation run uses `corepack yarn install`; every subsequent install must use `--immutable`.
+The image is based on `node:22.23.3-bookworm`, prepares Yarn `4.17.1` through Corepack, and installs the Chromium build required by Playwright `1.56.1`. Application dependencies are never installed globally in the image; the repository's `yarn.lock` remains authoritative.
 
-Yarn's `node-modules` linker is intentional for the later exact-source Grafana experiment. Dependency install scripts are disabled by default.
+The repository's `nodeLinker: node-modules` setting is authoritative. Compose therefore mounts named volumes at `/workspace/node_modules` and `/var/cache/yarn`, keeping dependency and Yarn cache contents outside the bind-mounted checkout. Source files and `yarn.lock` remain bind-mounted from WSL.
+
+The container entrypoint reads the bind-mounted checkout's numeric UID/GID and runs the requested development command with that identity. This prevents generated files in the repository from becoming root-owned.
 
 The known `@grafana/scenes@8.13.5` React peer warning is expected: Scenes declares React 18 while the pinned Grafana 13.2.3 cohort requires React 19.2.8. Do not suppress or override this warning; retain it as POC evidence.
 
 ## Workspace commands
 
-| Command | Current Task 1 behavior |
+| Operation | Container-first command |
 | --- | --- |
-| `corepack yarn install:poc` | Repeats the immutable install |
-| `corepack yarn typecheck` | Type-checks all three private workspaces |
-| `corepack yarn test:unit` | Runs the pinned Node/Vitest toolchain test |
-| `corepack yarn test:integration` | Succeeds with no integration tests until later tasks add them |
-| `corepack yarn test:e2e` | Succeeds with no browser tests until Task 2 adds the host and Playwright configuration |
-| `corepack yarn build:poc` | Performs the basic TypeScript project-reference build |
-| `corepack yarn inspect:bundle` | Runs the basic build and rejects accidental Grafana application-shell imports; Task 4 will add module/chunk evidence |
+| Immutable install | `docker compose run --rm dev yarn install --immutable` |
+| Type check | `docker compose run --rm dev yarn typecheck` |
+| Unit tests | `docker compose run --rm dev yarn test:unit` |
+| Integration tests | `docker compose run --rm dev yarn test:integration` |
+| Browser/E2E tests | `docker compose run --rm dev yarn test:e2e` |
+| Production build | `docker compose run --rm dev yarn build:poc` |
+| Forbidden-import inspection | `docker compose run --rm dev yarn inspect:bundle` |
+| In-container verification suite | `docker compose run --rm dev sh dev/container/verify-environment.sh` |
+| Complete container/host contract | `bash tests/container/dev-environment-contract.sh` |
 
-Use `corepack yarn workspaces list --json` to inspect workspace discovery. Use `corepack yarn why react`, `corepack yarn why react-dom`, and `corepack yarn why @grafana/scenes` to inspect the pinned runtime identity and expected peer warning.
+Use `docker compose run --rm dev yarn workspaces list --json` to inspect workspace discovery. Use the same prefix with `yarn why react`, `yarn why react-dom`, and `yarn why @grafana/scenes` to inspect the pinned runtime identity and expected peer warning.
+
+The complete contract builds the image by default. If upstream registries are temporarily unavailable and the exact image has already been built, `POC_SKIP_IMAGE_BUILD=true bash tests/container/dev-environment-contract.sh` reuses it while retaining every runtime, browser, port, and ownership assertion.
+
+## Run the development host
+
+Start the host with:
+
+```bash
+docker compose up dev
+```
+
+Open `http://localhost:5173/`. Vite listens on the container interface, while Compose publishes it only on host loopback through `127.0.0.1:5173:5173`.
+
+Stop the host with:
+
+```bash
+docker compose down
+```
+
+The `/grafana` development proxy remains configured, but no service is listening at its target until Task 3 adds the Grafana fixture.
+
+## Optional direct WSL tooling
+
+Direct WSL execution is optional. If a contributor intentionally chooses it, they must install Node.js `22.23.3`, enable Corepack, and use Yarn `4.17.1`. The equivalent direct install remains:
+
+```bash
+corepack yarn install --immutable
+```
+
+The container workflow is the supported default and is used for POC verification.
 
 ## Working with the repository
 
@@ -66,4 +100,4 @@ Until automated tooling is selected, validate documentation manually:
 
 ## Future setup
 
-Later implementation tasks will add the Vite host, Playwright browser configuration, Grafana container, runtime services, bundle evidence, and gate-specific commands. Do not infer that the presence of the private workspaces authorizes those later tasks.
+Later implementation tasks will add the Grafana container, runtime services, bundle evidence, and gate-specific commands. Do not infer that the development container authorizes those later tasks.

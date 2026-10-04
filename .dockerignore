@@ -1,0 +1,15 @@
+.git
+.superpowers
+.cache
+.yarn/cache
+.yarn/install-state.gz
+artifacts
+coverage
+node_modules
+**/node_modules
+**/dist
+playwright-report
+test-results
+dev/grafana/data
+grafana-data
+

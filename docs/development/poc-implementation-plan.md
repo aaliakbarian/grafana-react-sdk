@@ -388,6 +388,7 @@ No checkpoint below is a legal conclusion.
 ```text
 1 Toolchain/workspaces
   -> 2 Standalone host/proxy
+  -> 2.5 Containerized development/verification
   -> 3 Grafana fixture
   -> 4 Instrumentation/guards
   -> 5 Runtime foundation
@@ -487,6 +488,45 @@ Tasks 8, 10, and 12 contain explicit conditional experiment branches. A diagnost
 **Expected result:** A minimal React host builds and renders without Grafana, routing, navigation, an iframe, or global host-style mutation.
 
 **Proposed commit:** `feat: add standalone poc host shell`
+
+## Task 2.5: Containerize POC development and verification
+
+**Files:**
+
+- Create: `compose.yaml`
+- Create: `.dockerignore`
+- Create: `dev/container/Dockerfile`
+- Create: `dev/container/entrypoint.sh`
+- Create: `dev/container/verify-environment.sh`
+- Create: `tests/container/dev-environment-contract.sh`
+- Modify: `apps/poc-host/package.json`
+- Modify: `apps/poc-host/src/host.test.ts`
+- Modify: `apps/poc-host/vite.config.ts`
+- Modify: `apps/poc-host/tsconfig.json`
+- Modify: `docs/development/local-development.md`
+
+**Interfaces:**
+
+- Consumes: the Task 1 lockfile/toolchain and Task 2 standalone host.
+- Produces: one `dev` service based on `node:22.23.3-bookworm`, with Yarn `4.17.1` via Corepack and Playwright/Chromium exactly matching `1.56.1`.
+- Produces: container-first execution for all subsequent Node, Yarn, TypeScript, Vite, Vitest, Playwright, and build commands.
+- Preserves: the WSL checkout as a bind mount, loopback-only `127.0.0.1:5173:5173` publication, and non-root repository ownership.
+
+**Steps:**
+
+- [ ] Confirm `.yarnrc.yml` uses `nodeLinker: node-modules`; mount named volumes for `/workspace/node_modules` and Yarn global storage without changing Yarn configuration.
+- [ ] Build the development image from `node:22.23.3-bookworm`, enable Corepack/Yarn `4.17.1`, and install Chromium plus Linux dependencies with Playwright exactly `1.56.1`.
+- [ ] Drop normal commands to the bind-mounted checkout owner's numeric UID/GID and reject a root-owned checkout.
+- [ ] Add only the `dev` Compose service; do not add Grafana or provisioning.
+- [ ] Make Vite bind to the container interface only when `POC_VITE_HOST` is supplied; publish port 5173 only on host loopback.
+- [ ] Make the container workflow the default in local-development documentation and retain direct WSL execution as optional.
+- [ ] Run the environment contract, immutable install, type check, unit tests, integration command, browser test, build, forbidden-import inspection, single-React check, localhost reachability check, and before/after ownership comparison without host Node/npm/Yarn/Playwright in `PATH`.
+
+**Command convention after Task 2.5:** Every later plan command that invokes `corepack yarn ...`, `yarn ...`, Node.js, TypeScript, Vite, Vitest, or Playwright runs through `docker compose run --rm dev ...` unless the task explicitly requires the long-running `docker compose up dev` service. Host-side Docker commands remain host-side.
+
+**Expected result:** A contributor needs only Git, Docker/Compose, an editor/agent, and the WSL repository checkout; the complete current verification suite runs in the development container without producing root-owned repository files.
+
+**Proposed commit:** `chore: containerize poc development environment`
 
 ## Task 3: Provision the deterministic Grafana 13.2.3 environment
 
