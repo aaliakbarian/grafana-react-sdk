@@ -13,11 +13,11 @@
   ],
   "scripts": {
     "install:poc": "yarn install --immutable",
-    "typecheck": "yarn workspace @grafana-react-sdk/poc-host typecheck && yarn workspace @grafana-react-sdk/poc-compat typecheck && yarn workspace @grafana-react-sdk/poc-grafana-bridge typecheck",
-    "test:unit": "vitest run packages/poc-compat/src/toolchain.test.ts --environment node",
+    "typecheck": "yarn workspace @grafana-react-sdk/poc-host typecheck && yarn workspace @grafana-react-sdk/poc-compat typecheck && yarn workspace @grafana-react-sdk/poc-grafana-bridge typecheck && tsc6 --noEmit --moduleResolution Bundler --module ESNext --target ES2022 --skipLibCheck playwright.config.ts",
+    "test:unit": "vitest run packages/poc-compat/src/toolchain.test.ts apps/poc-host/src/host.test.ts --environment node",
     "test:integration": "vitest run integration --environment node --passWithNoTests",
     "test:e2e": "playwright test tests/e2e --pass-with-no-tests",
-    "build:poc": "tsc6 -b tsconfig.base.json --pretty false",
+    "build:poc": "tsc6 -b tsconfig.base.json --pretty false && yarn workspace @grafana-react-sdk/poc-host build:app",
     "inspect:bundle": "yarn build:poc && node --eval 'const fs = require(\"node:fs\"); const path = require(\"node:path\"); const banned = /public\\/app\\/app(?:\\.ts)?|GrafanaApp\\.init/; const hits = []; const walk = (dir) => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) { const file = path.join(dir, entry.name); if (entry.isDirectory()) walk(file); else if (/\\.[cm]?[jt]sx?$/.test(entry.name) && banned.test(fs.readFileSync(file, \"utf8\"))) hits.push(file); } }; for (const root of [\"apps\", \"packages\"]) walk(root); if (hits.length) { console.error(`Forbidden Grafana application-shell import found:\\n${hits.join(\"\\n\")}`); process.exit(1); } console.log(\"No forbidden Grafana application-shell imports found.\");'"
   },
   "devDependencies": {

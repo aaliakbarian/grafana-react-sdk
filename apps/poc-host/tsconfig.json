@@ -2,8 +2,15 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
-    "tsBuildInfoFile": "./dist/poc-host.tsbuildinfo"
+    "rootDir": ".",
+    "tsBuildInfoFile": "./dist/poc-host.tsbuildinfo",
+    "types": [
+      "vite/client"
+    ]
   },
-  "files": []
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "vite.config.ts"
+  ]
 }
