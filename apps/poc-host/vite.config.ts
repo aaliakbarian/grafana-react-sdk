@@ -1,8 +1,19 @@
 import react from '@vitejs/plugin-react';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
+import { bundleEvidencePlugin } from './build/bundleEvidencePlugin.ts';
+import { forbiddenGrafanaImportPlugin } from './build/forbiddenGrafanaImportPlugin.ts';
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    forbiddenGrafanaImportPlugin({ repositoryRoot }),
+    react(),
+    bundleEvidencePlugin({ repositoryRoot }),
+  ],
   resolve: {
     dedupe: [
       'react',

@@ -8,15 +8,9 @@ export default defineConfig({
   reporter: 'line',
   use: {
     baseURL: 'http://localhost:5173',
-    trace: 'retain-on-failure',
-    contextOptions: {
-      recordHar: {
-        path: 'artifacts/playwright/task-2-host-smoke.har',
-        content: 'omit',
-        mode: 'minimal',
-        urlFilter: /^(?!.*\/grafana(?:\/|$)).*$/,
-      },
-    },
+    // Native traces/HARs can retain cookies or headers. Task 4 writes only
+    // explicitly sanitized network evidence through the test support layer.
+    trace: 'off',
   },
   projects: [
     {

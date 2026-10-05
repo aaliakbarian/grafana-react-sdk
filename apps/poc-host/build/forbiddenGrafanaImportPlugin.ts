@@ -1,0 +1,208 @@
+import type { Plugin } from 'vite';
+
+export interface ForbiddenGrafanaImport {
+  category:
+    | 'application-entrypoint'
+    | 'application-navigation-chrome'
+    | 'application-routing'
+    | 'arbitrary-systemjs'
+    | 'dashboard-edit-shell'
+    | 'general-plugin-loader'
+    | 'grafana-application-source-outside-bridge'
+    | 'grafana-internal-outside-bridge';
+  id: string;
+  importer?: string;
+  reason: string;
+}
+
+export interface ForbiddenGrafanaImportOptions {
+  repositoryRoot?: string;
+  reportFile?: string;
+  sourceBridgeRoots?: string[];
+}
+
+function normalizeModuleId(id: string): string {
+  return id.replace(/^\0+/, '').replaceAll('\\', '/').split('?')[0] ?? id;
+}
+
+function evidenceModuleId(id: string, repositoryRoot: string): string {
+  const normalized = normalizeModuleId(id);
+  const normalizedRoot = normalizeModuleId(repositoryRoot).replace(/\/$/, '');
+  if (normalized.startsWith(`${normalizedRoot}/`)) {
+    return `<repo>/${normalized.slice(normalizedRoot.length + 1)}`;
+  }
+  if (process.env.GRAFANA_SOURCE_DIR) {
+    const sourceRoot = normalizeModuleId(process.env.GRAFANA_SOURCE_DIR).replace(/\/$/, '');
+    if (normalized.startsWith(`${sourceRoot}/`)) {
+      return `<grafana-source>/${normalized.slice(sourceRoot.length + 1)}`;
+    }
+  }
+  return normalized;
+}
+
+function isInsideAllowedSourceBoundary(importer: string | undefined, roots: readonly string[]): boolean {
+  if (!importer) {
+    return false;
+  }
+  const normalizedImporter = normalizeModuleId(importer);
+  return roots.some((root) => normalizedImporter.includes(normalizeModuleId(root)));
+}
+
+export function classifyForbiddenGrafanaImport(
+  source: string,
+  importer?: string,
+  options: ForbiddenGrafanaImportOptions = {}
+): ForbiddenGrafanaImport | undefined {
+  const id = normalizeModuleId(source);
+  const roots = options.sourceBridgeRoots ?? ['/packages/poc-grafana-bridge/'];
+  const violation = (
+    category: ForbiddenGrafanaImport['category'],
+    reason: string
+  ): ForbiddenGrafanaImport => ({ category, id, ...(importer ? { importer } : {}), reason });
+
+  if (/(?:^|\/)public\/app\/app(?:\.[cm]?[jt]sx?)?$/i.test(id)) {
+    return violation('application-entrypoint', 'Grafana application entrypoint is forbidden.');
+  }
+  if (/(?:^|\/)public\/app\/(?:routes|core\/navigation)(?:\/|$)/i.test(id)) {
+    return violation('application-routing', 'Grafana route registration and navigation state are forbidden.');
+  }
+  if (
+    /(?:^|\/)public\/app\/core\/components\/(?:AppChrome|NavBar|MegaMenu|TopNav)(?:\/|$)/i.test(
+      id
+    )
+  ) {
+    return violation('application-navigation-chrome', 'Grafana navigation and application chrome are forbidden.');
+  }
+  if (
+    /(?:^|\/)public\/app\/features\/(?:dashboard\/components\/(?:PanelEditor|DashboardSettings|DashNav)|dashboard-scene\/(?:settings|scene\/(?:DashboardScene|SceneEditPanel)))(?:\/|\.|$)/i.test(
+      id
+    )
+  ) {
+    return violation('dashboard-edit-shell', 'Grafana dashboard editing and shell modules are forbidden.');
+  }
+  if (
+    /(?:^|\/)public\/app\/features\/plugins\/(?:builtInPlugins|importPanelPlugin|plugin_loader)(?:\/|\.|$)/i.test(
+      id
+    )
+  ) {
+    return violation('general-plugin-loader', 'Grafana general plugin loading is outside the fixed POC catalogue.');
+  }
+  if (/(?:^|\/)systemjs(?:\/|$)|^systemjs$/i.test(id)) {
+    return violation('arbitrary-systemjs', 'Arbitrary SystemJS plugin loading is forbidden.');
+  }
+  if (/^@grafana\/[^/]+\/internal(?:\/|$)/.test(id) && !isInsideAllowedSourceBoundary(importer, roots)) {
+    return violation(
+      'grafana-internal-outside-bridge',
+      'Grafana internal exports may only be evaluated inside the audited source bridge.'
+    );
+  }
+  if (/(?:^|\/)public\/app\//i.test(id) && !isInsideAllowedSourceBoundary(importer, roots)) {
+    return violation(
+      'grafana-application-source-outside-bridge',
+      'Grafana application source may only be imported by the audited source bridge.'
+    );
+  }
+  return undefined;
+}
+
+export function forbiddenGrafanaImportPlugin(
+  options: ForbiddenGrafanaImportOptions = {}
+): Plugin {
+  const repositoryRoot = options.repositoryRoot ?? process.cwd();
+  const sourceBridgeRoots = [
+    '/packages/poc-grafana-bridge/',
+    ...(process.env.GRAFANA_SOURCE_DIR ? [process.env.GRAFANA_SOURCE_DIR] : []),
+    ...(options.sourceBridgeRoots ?? []),
+  ];
+  const inspectedModuleIds = new Set<string>();
+  const violations = new Map<string, ForbiddenGrafanaImport>();
+  const inspect = (source: string, importer?: string) => {
+    inspectedModuleIds.add(normalizeModuleId(source));
+    const finding = classifyForbiddenGrafanaImport(source, importer, { sourceBridgeRoots });
+    if (finding) {
+      violations.set(`${finding.category}:${finding.id}:${finding.importer ?? ''}`, finding);
+    }
+    return finding;
+  };
+
+  return {
+    name: 'poc-forbidden-grafana-imports',
+    enforce: 'pre',
+    buildStart() {
+      inspectedModuleIds.clear();
+      violations.clear();
+    },
+    resolveId(source, importer) {
+      const finding = inspect(source, importer);
+      if (finding) {
+        this.error(`${finding.category}: ${finding.id} (${finding.reason})`);
+      }
+      return null;
+    },
+    moduleParsed(moduleInfo) {
+      const moduleFinding = inspect(moduleInfo.id, moduleInfo.id);
+      if (moduleFinding) {
+        this.error(`${moduleFinding.category}: ${moduleFinding.id} (${moduleFinding.reason})`);
+      }
+      for (const importedId of [...moduleInfo.importedIds, ...moduleInfo.dynamicallyImportedIds]) {
+        const finding = inspect(importedId, moduleInfo.id);
+        if (finding) {
+          this.error(`${finding.category}: ${finding.id} (${finding.reason})`);
+        }
+      }
+    },
+    transform(code, id) {
+      if (/\bGrafanaApp\s*\.\s*init\s*\(/.test(code)) {
+        const finding: ForbiddenGrafanaImport = {
+          category: 'application-entrypoint',
+          id: normalizeModuleId(id),
+          reason: 'GrafanaApp.init call is forbidden.',
+        };
+        violations.set(`grafana-app-init:${id}`, finding);
+        this.error(`${finding.category}: ${finding.id} (${finding.reason})`);
+      }
+      if (/\bSystem\s*\.\s*import\s*\(/.test(code)) {
+        const finding: ForbiddenGrafanaImport = {
+          category: 'arbitrary-systemjs',
+          id: normalizeModuleId(id),
+          reason: 'System.import fallback is forbidden.',
+        };
+        violations.set(`system-import:${id}`, finding);
+        this.error(`${finding.category}: ${finding.id} (${finding.reason})`);
+      }
+      return null;
+    },
+    buildEnd(error) {
+      if (!error && violations.size > 0) {
+        const details = [...violations.values()]
+          .map((finding) => `${finding.category}: ${finding.id} (${finding.reason})`)
+          .join('\n');
+        this.error(`Forbidden Grafana dependency boundary crossed:\n${details}`);
+      }
+    },
+    generateBundle() {
+      const evidenceViolations = [...violations.values()].map((violation) => ({
+        ...violation,
+        id: evidenceModuleId(violation.id, repositoryRoot),
+        ...(violation.importer
+          ? { importer: evidenceModuleId(violation.importer, repositoryRoot) }
+          : {}),
+      }));
+      this.emitFile({
+        fileName: options.reportFile ?? 'evidence/forbidden-import-report.json',
+        source: `${JSON.stringify(
+          {
+            inspectedModuleIds: [...inspectedModuleIds]
+              .map((id) => evidenceModuleId(id, repositoryRoot))
+              .sort(),
+            policyVersion: 1,
+            violations: evidenceViolations,
+          },
+          null,
+          2
+        )}\n`,
+        type: 'asset',
+      });
+    },
+  };
+}

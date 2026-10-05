@@ -1,0 +1,300 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve, sep } from 'node:path';
+
+import type { Page } from '@playwright/test';
+
+import type {
+  DomResourceSnapshot,
+  ResourceCounts,
+} from '../../../packages/poc-compat/src/instrumentation/resourceTracker';
+
+export interface BrowserResourceEvidenceSnapshot {
+  dom: DomResourceSnapshot;
+  iframes: {
+    current: number;
+    observations: Array<{ phase: 'initial' | 'mutation'; sequence: number }>;
+  };
+  instance: ResourceCounts;
+  label: string;
+  page: ResourceCounts;
+}
+
+function safeArtifactPath(path: string): string {
+  const artifactsRoot = resolve('artifacts');
+  const target = resolve(path);
+  if (target !== artifactsRoot && !target.startsWith(`${artifactsRoot}${sep}`)) {
+    throw new Error(`Evidence path must remain under artifacts/: ${relative(process.cwd(), target)}`);
+  }
+  return target;
+}
+
+export async function installResourceEvidence(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const kinds = [
+      'abortController',
+      'animationFrame',
+      'eventListener',
+      'fetch',
+      'interval',
+      'mutationObserver',
+      'portal',
+      'portalChild',
+      'resizeObserver',
+      'sceneActivation',
+      'styleElement',
+      'subscription',
+      'timeout',
+    ] as const;
+    type Kind = (typeof kinds)[number];
+    type Lifetime = 'instance' | 'page';
+    const emptyCounts = () => Object.fromEntries(kinds.map((kind) => [kind, 0])) as Record<Kind, number>;
+    const counts = { instance: emptyCounts(), page: emptyCounts() };
+    const releases = new Set<() => void>();
+    // Automatically observed browser resources belong to the host page.
+    // Later dashboard adapters use mark() to identify instance-owned work.
+    const acquire = (kind: Kind, lifetime: Lifetime = 'page') => {
+      counts[lifetime][kind] += 1;
+      let active = true;
+      const release = () => {
+        if (!active) return;
+        active = false;
+        counts[lifetime][kind] = Math.max(0, counts[lifetime][kind] - 1);
+        releases.delete(release);
+      };
+      releases.add(release);
+      return release;
+    };
+
+    const iframeObservations: Array<{ phase: 'initial' | 'mutation'; sequence: number }> = [];
+    const recordIframes = (phase: 'initial' | 'mutation', number: number) => {
+      for (let index = 0; index < number; index += 1) {
+        iframeObservations.push({ phase, sequence: iframeObservations.length + 1 });
+      }
+    };
+    recordIframes('initial', document.querySelectorAll('iframe').length);
+    const NativeMutationObserver = globalThis.MutationObserver;
+    const iframeObserver = new NativeMutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          recordIframes(
+            'mutation',
+            (node.tagName.toLowerCase() === 'iframe' ? 1 : 0) + node.querySelectorAll('iframe').length
+          );
+        }
+      }
+    });
+    iframeObserver.observe(document, { childList: true, subtree: true });
+
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    const nativeClearTimeout = window.clearTimeout.bind(window);
+    const timeoutReleases = new Map<number, () => void>();
+    window.setTimeout = ((handler: TimerHandler, timeout?: number, ...arguments_: unknown[]) => {
+      let timer = 0;
+      const release = acquire('timeout');
+      const wrapped = (...callbackArguments: unknown[]) => {
+        timeoutReleases.delete(timer);
+        release();
+        if (typeof handler === 'function') handler(...callbackArguments);
+        else window.eval(handler);
+      };
+      timer = nativeSetTimeout(wrapped, timeout, ...arguments_);
+      timeoutReleases.set(timer, release);
+      return timer;
+    }) as typeof window.setTimeout;
+    window.clearTimeout = ((timer?: number) => {
+      timeoutReleases.get(timer ?? 0)?.();
+      timeoutReleases.delete(timer ?? 0);
+      nativeClearTimeout(timer);
+    }) as typeof window.clearTimeout;
+
+    const nativeSetInterval = window.setInterval.bind(window);
+    const nativeClearInterval = window.clearInterval.bind(window);
+    const intervalReleases = new Map<number, () => void>();
+    window.setInterval = ((handler: TimerHandler, timeout?: number, ...arguments_: unknown[]) => {
+      const timer = nativeSetInterval(handler, timeout, ...arguments_);
+      intervalReleases.set(timer, acquire('interval'));
+      return timer;
+    }) as typeof window.setInterval;
+    window.clearInterval = ((timer?: number) => {
+      intervalReleases.get(timer ?? 0)?.();
+      intervalReleases.delete(timer ?? 0);
+      nativeClearInterval(timer);
+    }) as typeof window.clearInterval;
+
+    const nativeRequestAnimationFrame = globalThis.requestAnimationFrame.bind(globalThis);
+    const nativeCancelAnimationFrame = globalThis.cancelAnimationFrame.bind(globalThis);
+    const frameReleases = new Map<number, () => void>();
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      let frame = 0;
+      const release = acquire('animationFrame');
+      frame = nativeRequestAnimationFrame((time) => {
+        frameReleases.delete(frame);
+        release();
+        callback(time);
+      });
+      frameReleases.set(frame, release);
+      return frame;
+    }) as typeof globalThis.requestAnimationFrame;
+    globalThis.cancelAnimationFrame = ((frame: number) => {
+      frameReleases.get(frame)?.();
+      frameReleases.delete(frame);
+      nativeCancelAnimationFrame(frame);
+    }) as typeof globalThis.cancelAnimationFrame;
+
+    const nativeFetch = globalThis.fetch.bind(globalThis);
+    globalThis.fetch = (async (...arguments_: Parameters<typeof fetch>) => {
+      const release = acquire('fetch');
+      try {
+        return await nativeFetch(...arguments_);
+      } finally {
+        release();
+      }
+    }) as typeof globalThis.fetch;
+
+    const NativeAbortController = globalThis.AbortController;
+    globalThis.AbortController = class TrackedAbortController extends NativeAbortController {
+      constructor() {
+        super();
+        const release = acquire('abortController');
+        this.signal.addEventListener('abort', release, { once: true });
+      }
+    };
+
+    const NativeResizeObserver = globalThis.ResizeObserver;
+    if (NativeResizeObserver) {
+      globalThis.ResizeObserver = class TrackedResizeObserver extends NativeResizeObserver {
+        #active = true;
+        #release = acquire('resizeObserver');
+
+        override disconnect() {
+          super.disconnect();
+          this.#release();
+          this.#active = false;
+        }
+
+        override observe(target: Element, options?: ResizeObserverOptions) {
+          if (!this.#active) {
+            this.#release = acquire('resizeObserver');
+            this.#active = true;
+          }
+          super.observe(target, options);
+        }
+      };
+    }
+
+    globalThis.MutationObserver = class TrackedMutationObserver extends NativeMutationObserver {
+      #active = true;
+      #release = acquire('mutationObserver');
+
+      override disconnect() {
+        super.disconnect();
+        this.#release();
+        this.#active = false;
+      }
+
+      override observe(target: Node, options?: MutationObserverInit) {
+        if (!this.#active) {
+          this.#release = acquire('mutationObserver');
+          this.#active = true;
+        }
+        super.observe(target, options);
+      }
+    };
+
+    const nativeAddEventListener = EventTarget.prototype.addEventListener;
+    const nativeRemoveEventListener = EventTarget.prototype.removeEventListener;
+    const listenerRecords = new WeakMap<
+      EventTarget,
+      Map<EventListenerOrEventListenerObject, Map<string, { release: () => void; wrapped: EventListener }>>
+    >();
+    const listenerKey = (type: string, options?: boolean | AddEventListenerOptions) =>
+      `${type}:${typeof options === 'boolean' ? options : Boolean(options?.capture)}`;
+    EventTarget.prototype.addEventListener = function (type, listener, options) {
+      if (!listener) return nativeAddEventListener.call(this, type, listener, options);
+      const byListener = listenerRecords.get(this) ?? new Map();
+      listenerRecords.set(this, byListener);
+      const byOption = byListener.get(listener) ?? new Map();
+      byListener.set(listener, byOption);
+      const key = listenerKey(type, options);
+      if (byOption.has(key)) return;
+      const release = acquire('eventListener');
+      const wrapped: EventListener = (event) => {
+        if (typeof listener === 'function') listener.call(this, event);
+        else listener.handleEvent(event);
+        if (typeof options === 'object' && options.once) {
+          release();
+          byOption.delete(key);
+        }
+      };
+      byOption.set(key, { release, wrapped });
+      nativeAddEventListener.call(this, type, wrapped, options);
+    };
+    EventTarget.prototype.removeEventListener = function (type, listener, options) {
+      if (!listener) return nativeRemoveEventListener.call(this, type, listener, options);
+      const key = listenerKey(type, options);
+      const record = listenerRecords.get(this)?.get(listener)?.get(key);
+      if (record) {
+        record.release();
+        listenerRecords.get(this)?.get(listener)?.delete(key);
+        return nativeRemoveEventListener.call(this, type, record.wrapped, options);
+      }
+      return nativeRemoveEventListener.call(this, type, listener, options);
+    };
+
+    const snapshot = (label: string) => ({
+      dom: {
+        emotionStyleElements: document.querySelectorAll('style[data-emotion]').length,
+        iframeElements: document.querySelectorAll('iframe').length,
+        portalChildren: document.querySelector('#grafana-portal-container')?.childElementCount ?? 0,
+        portalRoots: document.querySelectorAll('#grafana-portal-container').length,
+        styleElements: document.querySelectorAll('style').length,
+      },
+      iframes: {
+        current: document.querySelectorAll('iframe').length,
+        observations: iframeObservations.map((observation) => ({ ...observation })),
+      },
+      instance: { ...counts.instance },
+      label,
+      page: { ...counts.page },
+    });
+    Object.defineProperty(globalThis, '__POC_RESOURCE_EVIDENCE__', {
+      configurable: false,
+      value: {
+        mark(kind: Kind, lifetime: Lifetime = 'instance') {
+          return acquire(kind, lifetime);
+        },
+        snapshot,
+      },
+      writable: false,
+    });
+  });
+}
+
+export async function captureResourceEvidence(
+  page: Page,
+  label: string
+): Promise<BrowserResourceEvidenceSnapshot> {
+  return page.evaluate((snapshotLabel) => {
+    const evidence = (
+      globalThis as typeof globalThis & {
+        __POC_RESOURCE_EVIDENCE__?: {
+          snapshot(label: string): BrowserResourceEvidenceSnapshot;
+        };
+      }
+    ).__POC_RESOURCE_EVIDENCE__;
+    if (!evidence) {
+      throw new Error('POC resource evidence was not installed before navigation.');
+    }
+    return evidence.snapshot(snapshotLabel);
+  }, label);
+}
+
+export async function writeResourceEvidence(
+  path: string,
+  snapshots: readonly BrowserResourceEvidenceSnapshot[]
+): Promise<void> {
+  const target = safeArtifactPath(path);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, `${JSON.stringify(snapshots, null, 2)}\n`, 'utf8');
+}

@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "outDir": "./dist",
     "rootDir": ".",
     "tsBuildInfoFile": "./dist/poc-host.tsbuildinfo",
@@ -10,6 +11,7 @@
     ]
   },
   "include": [
+    "build/**/*.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "vite.config.ts"

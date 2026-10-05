@@ -10,6 +10,8 @@ node_modules/
 # Build output
 dist/
 build/
+!apps/poc-host/build/
+!apps/poc-host/build/*.ts
 lib/
 out/
 .next/
