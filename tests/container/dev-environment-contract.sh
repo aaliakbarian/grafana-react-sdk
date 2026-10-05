@@ -29,10 +29,10 @@ if grep -Eq 'playwright@(latest|\^|~)' dev/container/Dockerfile; then
   exit 1
 fi
 
-compose_services=$(docker compose config --services)
+compose_services=$(docker compose config --services | LC_ALL=C sort)
 
-if [ "$compose_services" != "dev" ]; then
-  echo "Expected exactly one Compose service named dev; got: $compose_services" >&2
+if [ "$compose_services" != $'dev\ngrafana' ]; then
+  echo "Expected Compose services dev and grafana; got: $compose_services" >&2
   exit 1
 fi
 
@@ -40,9 +40,9 @@ if [[ "${POC_SKIP_IMAGE_BUILD:-false}" != true ]]; then
   docker compose build dev
 fi
 
-docker compose run --rm dev sh dev/container/verify-environment.sh
+docker compose run --rm --no-deps dev sh dev/container/verify-environment.sh
 
-docker compose run --rm dev sh -c '
+docker compose run --rm --no-deps dev sh -c '
   set -eu
   test "$(node --version)" = "v22.23.3"
   test "$(yarn --version)" = "4.17.1"
@@ -59,7 +59,7 @@ docker compose run --rm dev sh -c '
 '
 echo 'container_versions_and_mounts=verified'
 
-docker compose up --detach dev
+docker compose up --detach --no-deps dev
 
 reachable=false
 for ((attempt = 1; attempt <= 30; attempt += 1)); do

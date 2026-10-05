@@ -1,0 +1,74 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Disposable lifecycle-only dashboard for the Grafana React SDK native-rendering POC.",
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "# Grafana React SDK POC\n\nNative **phase0-alt** lifecycle fixture.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "13.2.3",
+      "title": "Alternate Text sentinel",
+      "type": "text"
+    }
+  ],
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 42,
+  "tags": [
+    "grafana-react-sdk",
+    "phase0",
+    "synthetic"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "phase0",
+          "value": "phase0"
+        },
+        "hide": 2,
+        "label": "Environment",
+        "name": "environment",
+        "query": "phase0",
+        "skipUrlSync": true,
+        "type": "constant"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Grafana React SDK Phase 0 POC Alternate",
+  "uid": "grsdk-phase0-poc-alt",
+  "version": 1,
+  "weekStart": ""
+}

@@ -1,0 +1,42 @@
+name: grafana-react-sdk-poc-grafana
+
+services:
+  grafana:
+    image: grafana/grafana:13.2.3@sha256:d84563330dc9d2fd2bc096d0fb96021b5319c75bf6ed555566709998e823dec4
+    platform: linux/amd64
+    environment:
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?Set GRAFANA_ADMIN_USER in dev/grafana/.env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in dev/grafana/.env}
+      GF_SERVER_ROOT_URL: http://localhost:5173/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./provisioning/dashboards/provider.yaml:/etc/grafana/provisioning/dashboards/provider.yaml:ro
+      - ./provisioning/dashboards/grsdk-phase0-poc.json:/var/lib/grafana/dashboards/grsdk-phase0-poc.json:ro
+      - ./provisioning/dashboards/grsdk-phase0-poc-alt.json:/var/lib/grafana/dashboards/grsdk-phase0-poc-alt.json:ro
+    networks:
+      - grsdk-poc
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -q --spider http://127.0.0.1:3000/api/health || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
+
+volumes:
+  grafana-data:
+
+networks:
+  grsdk-poc:
+    name: grsdk-poc

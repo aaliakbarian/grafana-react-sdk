@@ -20,12 +20,13 @@ export default defineConfig({
     ],
   },
   server: {
+    allowedHosts: ['dev'],
     host: process.env.POC_VITE_HOST ?? 'localhost',
     port: 5173,
     strictPort: true,
     proxy: {
       '/grafana': {
-        target: 'http://127.0.0.1:3000',
+        target: process.env.POC_GRAFANA_PROXY_TARGET ?? 'http://127.0.0.1:3000',
         changeOrigin: false,
         secure: false,
         ws: true,

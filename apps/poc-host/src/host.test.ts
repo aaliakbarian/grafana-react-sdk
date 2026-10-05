@@ -43,6 +43,7 @@ describe('standalone POC host contract', () => {
       default: {
         resolve?: { dedupe?: string[] };
         server?: {
+          allowedHosts?: string[];
           host?: string;
           port?: number;
           proxy?: Record<
@@ -80,8 +81,9 @@ describe('standalone POC host contract', () => {
       expect(process.env.POC_VITE_HOST).toBe('0.0.0.0');
       expect(module.default.server).toMatchObject({ host: '0.0.0.0', port: 5173 });
     }
+    expect(module.default.server?.allowedHosts).toEqual(['dev']);
     expect(proxy).toMatchObject({
-      target: 'http://127.0.0.1:3000',
+      target: process.env.POC_GRAFANA_PROXY_TARGET ?? 'http://127.0.0.1:3000',
       changeOrigin: false,
     });
     expect(proxy?.headers).toBeUndefined();
