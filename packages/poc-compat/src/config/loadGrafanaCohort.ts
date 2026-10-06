@@ -1,3 +1,4 @@
+import type { BackendSrv } from '@grafana/runtime';
 import type { Context } from 'react';
 
 import {
@@ -39,8 +40,10 @@ interface RuntimeModule {
     readonly namespace: string;
     readonly theme2: PocTheme;
   };
+  getBackendSrv(): BackendSrv;
   getAppEvents(): unknown;
   readonly locationService: Record<string, unknown>;
+  setBackendSrv(instance: BackendSrv): void;
   setAppEvents(instance: PocEventBus): void;
 }
 

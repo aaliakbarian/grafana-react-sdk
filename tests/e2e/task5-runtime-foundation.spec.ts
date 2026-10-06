@@ -105,6 +105,7 @@ test('initializes and releases the standalone page runtime without shell behavio
     'grafana-cohort-loaded',
     'theme-selected',
     'i18n-initialized',
+    'backend-transport-installed',
     'app-events-installed',
     'location-policy-installed',
     'runtime-ready',
