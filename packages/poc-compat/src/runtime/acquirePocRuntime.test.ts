@@ -73,6 +73,7 @@ function createFakeCohort(bootData: unknown) {
   const observedEvents: string[] = [];
   const theme = { isLight: true };
   let appEvents: unknown;
+  let backendSrv: unknown;
   class FakeEventBus {
     publish(event: { type?: string }) {
       if (event.type) observedEvents.push(event.type);
@@ -112,8 +113,12 @@ function createFakeCohort(bootData: unknown) {
     },
     runtime: {
       config: { appSubUrl: '', bootData, namespace: 'default', theme2: theme },
+      getBackendSrv: () => backendSrv,
       getAppEvents: () => appEvents,
       locationService,
+      setBackendSrv: (value: unknown) => {
+        backendSrv = value;
+      },
       setAppEvents: (value: unknown) => {
         appEvents = value;
       },
@@ -198,6 +203,7 @@ describe('POC compatibility runtime coordinator', () => {
         'grafana-cohort-loaded',
         'theme-selected',
         'i18n-initialized',
+        'backend-transport-installed',
         'app-events-installed',
         'location-policy-installed',
         'runtime-ready',
@@ -207,6 +213,8 @@ describe('POC compatibility runtime coordinator', () => {
     expect(harness.window.grafanaBootData).toBeDefined();
     expect(harness.window.__grafana_public_path__).toBe('/grafana/public/');
     expect(first.providerValues.theme).toBe(harness.fake.theme);
+    expect(first.backendSrv).toBe(harness.fake.cohort.runtime.getBackendSrv());
+    expect(first.dashboardClient).toBe(second.dashboardClient);
     expect(harness.fake.cohort.runtime.config.theme2).toBe(first.providerValues.theme);
     expect(harness.fake.cohort.i18n.initPluginTranslations).toHaveBeenCalledWith(
       'grafana-scenes',

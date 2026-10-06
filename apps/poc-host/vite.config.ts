@@ -9,9 +9,8 @@ import { forbiddenGrafanaImportPlugin } from './build/forbiddenGrafanaImportPlug
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 export default defineConfig({
-  // These are the complete Task 5 dynamic Grafana package cohort. Pre-bundling
-  // just this boundary lets Vite normalize their CommonJS dependencies before
-  // the runtime coordinator imports them in the browser.
+  // This is the Task 5 dynamic Grafana cohort plus Task 6's direct RxJS boundary.
+  // Pre-bundling this list prevents optimizer reloads during browser probes.
   optimizeDeps: {
     include: [
       '@grafana/data',
@@ -20,6 +19,9 @@ export default defineConfig({
       '@grafana/scenes',
       '@grafana/schema',
       '@grafana/ui',
+      // Task 6's BackendSrv adapter imports Observable directly. Declaring it
+      // prevents Vite from discovering RxJS mid-probe and reloading the page.
+      'rxjs',
     ],
   },
   plugins: [

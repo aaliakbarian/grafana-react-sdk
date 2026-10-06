@@ -1,15 +1,24 @@
+import type { BackendSrv } from '@grafana/runtime';
+
 import type { PocHostConfig, NormalizedPocHostConfig } from '../config/hostConfig';
 import { normalizePocHostConfig } from '../config/hostConfig';
 import type { LoadGrafanaCohortOptions, GrafanaCohort } from '../config/loadGrafanaCohort';
 import { loadGrafanaCohort } from '../config/loadGrafanaCohort';
 import type { PocBootWindow } from '../config/installBootData';
 import { installBootData } from '../config/installBootData';
+import { createPocDashboardClient } from '../dashboard/loadDashboardV1';
+import type { PocDashboardClient } from '../dashboard/types';
 import type { PocAppEventBus, PocAppEventsInstallation } from '../events/installAppEvents';
 import { installAppEvents } from '../events/installAppEvents';
 import { initializePocI18n } from '../i18n/initializePocI18n';
 import { sanitizeEvidenceText } from '../instrumentation/networkRecorder';
 import { createResourceTracker } from '../instrumentation/resourceTracker';
 import { installLocationPolicy } from '../location/locationPolicy';
+import {
+  createPocBackendSrv,
+  createTransportEvidenceRecorder,
+  type PocTransportEvidenceRecorder,
+} from '../network/backendSrvAdapter';
 import type { PocGrafanaProviderValues } from '../theme/PocGrafanaProviders';
 import { installAssetPolicy, type PocAssetWindow } from '../theme/assetPolicy';
 import { createPocTheme } from '../theme/createPocTheme';
@@ -34,6 +43,7 @@ export type PocRuntimeInitializationStep =
   | 'grafana-cohort-loaded'
   | 'theme-selected'
   | 'i18n-initialized'
+  | 'backend-transport-installed'
   | 'app-events-installed'
   | 'location-policy-installed'
   | 'runtime-ready';
@@ -46,8 +56,11 @@ export interface PocDashboardScope {
 
 export interface PocRuntimeLease {
   readonly appEvents: PocAppEventBus;
+  readonly backendSrv: BackendSrv;
+  readonly dashboardClient: PocDashboardClient;
   readonly fingerprint: string;
   readonly providerValues: PocGrafanaProviderValues;
+  readonly transportEvidence: PocTransportEvidenceRecorder;
   acquireDashboardScope(instanceId: string): PocDashboardScope;
   release(): void;
 }
@@ -79,9 +92,12 @@ export interface PocRuntimeCoordinatorEnvironment {
 }
 
 interface ReadyRuntime {
+  readonly backendSrv: BackendSrv;
   readonly cohort: GrafanaCohort;
+  readonly dashboardClient: PocDashboardClient;
   readonly events: PocAppEventsInstallation;
   readonly providerValues: PocGrafanaProviderValues;
+  readonly transportEvidence: PocTransportEvidenceRecorder;
 }
 
 export function createPocRuntimeCoordinator(
@@ -141,13 +157,37 @@ export function createPocRuntimeCoordinator(
       await initializePocI18n(cohort, config.locale);
       recordStep('i18n-initialized', instrumentation);
 
+      const transportEvidence = createTransportEvidenceRecorder();
+      const backendSrv = createPocBackendSrv({
+        evidence: transportEvidence,
+        grafanaBasePath: config.grafanaBasePath,
+        request: config.request,
+      });
+      cohort.runtime.setBackendSrv(backendSrv);
+      if (cohort.runtime.getBackendSrv() !== backendSrv) {
+        throw new Error('Grafana Runtime did not retain the POC BackendSrv identity.');
+      }
+      const dashboardClient = createPocDashboardClient({
+        backendSrv,
+        namespace: config.namespace,
+        runtimeFingerprint: fingerprint!,
+      });
+      recordStep('backend-transport-installed', instrumentation);
+
       const events = installAppEvents(cohort, instrumentation);
       recordStep('app-events-installed', instrumentation);
 
       installLocationPolicy(cohort, instrumentation);
       recordStep('location-policy-installed', instrumentation);
 
-      const result = { cohort, events, providerValues } satisfies ReadyRuntime;
+      const result = {
+        backendSrv,
+        cohort,
+        dashboardClient,
+        events,
+        providerValues,
+        transportEvidence,
+      } satisfies ReadyRuntime;
       readyRuntime = result;
       status = 'ready';
       recordStep('runtime-ready', instrumentation);
@@ -191,8 +231,11 @@ export function createPocRuntimeCoordinator(
 
     return {
       appEvents: runtime.events.bus,
+      backendSrv: runtime.backendSrv,
+      dashboardClient: runtime.dashboardClient,
       fingerprint: fingerprint!,
       providerValues: runtime.providerValues,
+      transportEvidence: runtime.transportEvidence,
       acquireDashboardScope(instanceId) {
         if (!active) {
           throw new Error('Cannot acquire a dashboard scope from a released runtime lease.');
