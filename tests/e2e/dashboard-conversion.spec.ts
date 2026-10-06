@@ -241,6 +241,7 @@ test('publishes UID changes through the diagnostic component and cleans up witho
   const resources = await captureResourceEvidence(page, 'task7-component-unmounted');
   expect(resources.iframes).toEqual({ current: 0, observations: [] });
   expect(resources.dom).toMatchObject({ iframeElements: 0, portalRoots: 0 });
+  expect(resources.page.mutationObserver).toBe(0);
   expect(Object.values(resources.instance).every((count) => count === 0)).toBe(true);
   await consoleGuard.assertClean();
 });

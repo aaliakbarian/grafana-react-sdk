@@ -183,22 +183,35 @@ export async function installResourceEvidence(page: Page): Promise<void> {
       };
     }
 
+    const mutationObserverState = new WeakMap<
+      MutationObserver,
+      { active: boolean; release: () => void }
+    >();
     globalThis.MutationObserver = class TrackedMutationObserver extends NativeMutationObserver {
-      #active = true;
-      #release = acquire('mutationObserver');
+      constructor(callback: MutationCallback) {
+        super(callback);
+        mutationObserverState.set(this, {
+          active: true,
+          release: acquire('mutationObserver'),
+        });
+      }
 
       override disconnect() {
         super.disconnect();
-        this.#release();
-        this.#active = false;
+        const state = mutationObserverState.get(this);
+        if (state?.active) {
+          state.release();
+          state.active = false;
+        }
       }
 
       override observe(target: Node, options?: MutationObserverInit) {
-        if (!this.#active) {
-          this.#release = acquire('mutationObserver');
-          this.#active = true;
-        }
         super.observe(target, options);
+        const state = mutationObserverState.get(this);
+        if (state && !state.active) {
+          state.release = acquire('mutationObserver');
+          state.active = true;
+        }
       }
     };
 

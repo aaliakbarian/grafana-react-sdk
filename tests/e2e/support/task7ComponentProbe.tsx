@@ -4,22 +4,50 @@ import { GrafanaDashboard } from '../../../packages/poc-compat/src/component/Gra
 import type { PocPanelCatalog } from '../../../packages/poc-compat/src/dashboard/preflightFixture';
 import type { PocRuntimeLease } from '../../../packages/poc-compat/src/runtime/acquirePocRuntime';
 
-function waitForReady(container: HTMLElement, uid: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const started = performance.now();
-    const check = () => {
-      if (container.querySelector(`[data-poc-dashboard-uid="${uid}"]`)) {
-        resolve();
-        return;
+function createReadyObserver(container: HTMLElement) {
+  let pending:
+    | {
+        reject(error: Error): void;
+        resolve(): void;
+        timer: number;
+        uid: string;
       }
-      if (performance.now() - started >= 10_000) {
-        reject(new Error(`Task 7 diagnostic component did not publish ${uid}.`));
-        return;
+    | undefined;
+  const check = () => {
+    if (!pending || !container.querySelector(`[data-poc-dashboard-uid="${pending.uid}"]`)) {
+      return;
+    }
+    window.clearTimeout(pending.timer);
+    const { resolve } = pending;
+    pending = undefined;
+    resolve();
+  };
+  const observer = new MutationObserver(check);
+  observer.observe(container, { attributes: true, childList: true, subtree: true });
+
+  return {
+    disconnect() {
+      observer.disconnect();
+      if (pending) {
+        window.clearTimeout(pending.timer);
+        pending.reject(new Error(`Task 7 diagnostic component stopped before publishing ${pending.uid}.`));
+        pending = undefined;
       }
-      window.setTimeout(check, 10);
-    };
-    check();
-  });
+    },
+    waitFor(uid: string): Promise<void> {
+      if (pending) {
+        throw new Error(`Task 7 diagnostic component is already waiting for ${pending.uid}.`);
+      }
+      return new Promise((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          pending = undefined;
+          reject(new Error(`Task 7 diagnostic component did not publish ${uid}.`));
+        }, 10_000);
+        pending = { reject, resolve, timer, uid };
+        check();
+      });
+    },
+  };
 }
 
 export async function runTask7ComponentProbe(runtime: PocRuntimeLease, catalog: PocPanelCatalog) {
@@ -27,7 +55,10 @@ export async function runTask7ComponentProbe(runtime: PocRuntimeLease, catalog: 
   container.dataset.pocTask7Probe = 'true';
   document.body.appendChild(container);
   const root = createRoot(container);
+  const readyObserver = createReadyObserver(container);
   const readyUids: string[] = [];
+  let alternatePanelCount = 0;
+  let primaryPanelCount = 0;
   const render = (uid: string) =>
     root.render(
       <GrafanaDashboard
@@ -38,20 +69,24 @@ export async function runTask7ComponentProbe(runtime: PocRuntimeLease, catalog: 
       />
     );
 
-  render('grsdk-phase0-poc');
-  await waitForReady(container, 'grsdk-phase0-poc');
-  const primaryPanelCount = Number(
-    container.querySelector('[data-poc-dashboard-panel-count]')?.getAttribute('data-poc-dashboard-panel-count')
-  );
-  render('grsdk-phase0-poc-alt');
-  await waitForReady(container, 'grsdk-phase0-poc-alt');
-  const alternatePanelCount = Number(
-    container.querySelector('[data-poc-dashboard-panel-count]')?.getAttribute('data-poc-dashboard-panel-count')
-  );
+  try {
+    render('grsdk-phase0-poc');
+    await readyObserver.waitFor('grsdk-phase0-poc');
+    primaryPanelCount = Number(
+      container.querySelector('[data-poc-dashboard-panel-count]')?.getAttribute('data-poc-dashboard-panel-count')
+    );
+    render('grsdk-phase0-poc-alt');
+    await readyObserver.waitFor('grsdk-phase0-poc-alt');
+    alternatePanelCount = Number(
+      container.querySelector('[data-poc-dashboard-panel-count]')?.getAttribute('data-poc-dashboard-panel-count')
+    );
+  } finally {
+    root.unmount();
+    readyObserver.disconnect();
+    container.remove();
+    await Promise.resolve();
+  }
 
-  root.unmount();
-  container.remove();
-  await Promise.resolve();
   return {
     alternatePanelCount,
     primaryPanelCount,

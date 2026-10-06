@@ -149,6 +149,26 @@ describe('POC evidence instrumentation', () => {
     expect(tracker.assertBalanced()).toEqual([]);
   });
 
+  it('keeps page and dashboard-instance MutationObserver ownership separate', () => {
+    const tracker = createResourceTracker();
+    const releasePageObserver = tracker.acquire('mutationObserver', 'page');
+    const releaseDashboardObserver = tracker.acquire('mutationObserver', 'instance');
+
+    expect(tracker.snapshot()).toMatchObject({
+      instance: { mutationObserver: 1 },
+      page: { mutationObserver: 1 },
+    });
+
+    releaseDashboardObserver();
+    expect(tracker.snapshot()).toMatchObject({
+      instance: { mutationObserver: 0 },
+      page: { mutationObserver: 1 },
+    });
+
+    releasePageObserver();
+    expect(tracker.assertBalanced()).toEqual([]);
+  });
+
   it('records transient iframe mutations even when the iframe is later removed', () => {
     let mutationCallback: ((records: Array<{ addedNodes: ArrayLike<unknown> }>) => void) | undefined;
     let disconnected = false;
