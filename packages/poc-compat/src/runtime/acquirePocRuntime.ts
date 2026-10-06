@@ -1,0 +1,301 @@
+import type { PocHostConfig, NormalizedPocHostConfig } from '../config/hostConfig';
+import { normalizePocHostConfig } from '../config/hostConfig';
+import type { LoadGrafanaCohortOptions, GrafanaCohort } from '../config/loadGrafanaCohort';
+import { loadGrafanaCohort } from '../config/loadGrafanaCohort';
+import type { PocBootWindow } from '../config/installBootData';
+import { installBootData } from '../config/installBootData';
+import type { PocAppEventBus, PocAppEventsInstallation } from '../events/installAppEvents';
+import { installAppEvents } from '../events/installAppEvents';
+import { initializePocI18n } from '../i18n/initializePocI18n';
+import { sanitizeEvidenceText } from '../instrumentation/networkRecorder';
+import { createResourceTracker } from '../instrumentation/resourceTracker';
+import { installLocationPolicy } from '../location/locationPolicy';
+import type { PocGrafanaProviderValues } from '../theme/PocGrafanaProviders';
+import { installAssetPolicy, type PocAssetWindow } from '../theme/assetPolicy';
+import { createPocTheme } from '../theme/createPocTheme';
+import {
+  createPortalManager,
+  type PocPortalDocument,
+  type PocPortalElement,
+  type PocPortalManager,
+} from '../theme/portalManager';
+import {
+  createPocRuntimeIdentity,
+  PocRuntimeConflictError,
+  type PocRuntimeInstrumentationSink,
+} from './runtimeIdentity';
+
+export { PocRuntimeConflictError } from './runtimeIdentity';
+
+export type PocRuntimeInitializationStep =
+  | 'host-config-validated'
+  | 'boot-data-installed'
+  | 'asset-policy-installed'
+  | 'grafana-cohort-loaded'
+  | 'theme-selected'
+  | 'i18n-initialized'
+  | 'app-events-installed'
+  | 'location-policy-installed'
+  | 'runtime-ready';
+
+export interface PocDashboardScope {
+  readonly instanceId: string;
+  readonly portalRoot: PocPortalElement;
+  release(): void;
+}
+
+export interface PocRuntimeLease {
+  readonly appEvents: PocAppEventBus;
+  readonly fingerprint: string;
+  readonly providerValues: PocGrafanaProviderValues;
+  acquireDashboardScope(instanceId: string): PocDashboardScope;
+  release(): void;
+}
+
+export interface PocRuntimeInspection {
+  readonly activeDashboardScopes: number;
+  readonly activeLeases: number;
+  readonly failure?: string;
+  readonly fingerprint?: string;
+  readonly initializationSteps: readonly PocRuntimeInitializationStep[];
+  readonly moduleIdentities?: GrafanaCohort['moduleIdentities'];
+  readonly observedEventTypes: readonly string[];
+  readonly portal: { readonly activeReferences: number; readonly ownsRoot: boolean };
+  readonly status: 'empty' | 'failed' | 'initializing' | 'ready';
+}
+
+export interface PocRuntimeCoordinator {
+  acquire(
+    config: PocHostConfig,
+    instrumentation?: PocRuntimeInstrumentationSink
+  ): Promise<PocRuntimeLease>;
+  inspect(): PocRuntimeInspection;
+}
+
+export interface PocRuntimeCoordinatorEnvironment {
+  readonly document: PocPortalDocument;
+  readonly loadCohort?: (options: LoadGrafanaCohortOptions) => Promise<GrafanaCohort>;
+  readonly window: PocBootWindow & PocAssetWindow;
+}
+
+interface ReadyRuntime {
+  readonly cohort: GrafanaCohort;
+  readonly events: PocAppEventsInstallation;
+  readonly providerValues: PocGrafanaProviderValues;
+}
+
+export function createPocRuntimeCoordinator(
+  environment: PocRuntimeCoordinatorEnvironment
+): PocRuntimeCoordinator {
+  const resourceTracker = createResourceTracker();
+  const portalManager: PocPortalManager = createPortalManager(environment.document, resourceTracker);
+  const initializationSteps: PocRuntimeInitializationStep[] = [];
+  const dashboardScopes = new Map<string, { leaseId: number; releasePortal(): void }>();
+  let status: PocRuntimeInspection['status'] = 'empty';
+  let fingerprint: string | undefined;
+  let activeConfig: NormalizedPocHostConfig | undefined;
+  let initialization: Promise<ReadyRuntime> | undefined;
+  let readyRuntime: ReadyRuntime | undefined;
+  let failure: string | undefined;
+  let activeLeases = 0;
+  let nextLeaseId = 0;
+
+  const recordStep = (
+    step: PocRuntimeInitializationStep,
+    instrumentation?: PocRuntimeInstrumentationSink
+  ) => {
+    initializationSteps.push(step);
+    instrumentation?.record({ fingerprint, step, type: 'registration' });
+  };
+
+  const initialize = (
+    config: NormalizedPocHostConfig,
+    instrumentation?: PocRuntimeInstrumentationSink
+  ): Promise<ReadyRuntime> => {
+    status = 'initializing';
+    recordStep('host-config-validated', instrumentation);
+
+    return (async () => {
+      const bootDataInstallation = installBootData(config, environment.window);
+      recordStep('boot-data-installed', instrumentation);
+
+      installAssetPolicy(config, environment.window);
+      recordStep('asset-policy-installed', instrumentation);
+
+      const cohort = await (environment.loadCohort ?? loadGrafanaCohort)({
+        bootDataInstallation,
+        target: environment.window,
+      });
+      recordStep('grafana-cohort-loaded', instrumentation);
+
+      const theme = createPocTheme(cohort);
+      const providerValues: PocGrafanaProviderValues = {
+        ThemeContext: cohort.data.ThemeContext,
+        theme,
+      };
+      if (providerValues.theme !== cohort.runtime.config.theme2) {
+        throw new Error('Runtime config and React provider must share one Grafana theme object.');
+      }
+      recordStep('theme-selected', instrumentation);
+
+      await initializePocI18n(cohort, config.locale);
+      recordStep('i18n-initialized', instrumentation);
+
+      const events = installAppEvents(cohort, instrumentation);
+      recordStep('app-events-installed', instrumentation);
+
+      installLocationPolicy(cohort, instrumentation);
+      recordStep('location-policy-installed', instrumentation);
+
+      const result = { cohort, events, providerValues } satisfies ReadyRuntime;
+      readyRuntime = result;
+      status = 'ready';
+      recordStep('runtime-ready', instrumentation);
+      return result;
+    })().catch((error: unknown) => {
+      status = 'failed';
+      failure = sanitizeEvidenceText(error);
+      instrumentation?.record({
+        detail: failure,
+        fingerprint,
+        step: 'runtime-initialization',
+        type: 'failure',
+      });
+      throw error;
+    });
+  };
+
+  const makeLease = (
+    runtime: ReadyRuntime,
+    instrumentation?: PocRuntimeInstrumentationSink
+  ): PocRuntimeLease => {
+    const leaseId = ++nextLeaseId;
+    const ownedScopes = new Set<string>();
+    activeLeases += 1;
+    instrumentation?.record({ fingerprint, step: 'runtime-lease-acquired', type: 'lifecycle' });
+    let active = true;
+
+    const releaseScope = (instanceId: string) => {
+      const scope = dashboardScopes.get(instanceId);
+      if (!scope || scope.leaseId !== leaseId) return;
+      scope.releasePortal();
+      dashboardScopes.delete(instanceId);
+      ownedScopes.delete(instanceId);
+      instrumentation?.record({
+        detail: sanitizeEvidenceText(instanceId),
+        fingerprint,
+        step: 'dashboard-scope-released',
+        type: 'lifecycle',
+      });
+    };
+
+    return {
+      appEvents: runtime.events.bus,
+      fingerprint: fingerprint!,
+      providerValues: runtime.providerValues,
+      acquireDashboardScope(instanceId) {
+        if (!active) {
+          throw new Error('Cannot acquire a dashboard scope from a released runtime lease.');
+        }
+        if (!instanceId || dashboardScopes.has(instanceId)) {
+          throw new Error(`Dashboard scope ${instanceId || '<empty>'} is already active or invalid.`);
+        }
+        const portal = portalManager.acquire();
+        ownedScopes.add(instanceId);
+        dashboardScopes.set(instanceId, { leaseId, releasePortal: portal.release });
+        instrumentation?.record({
+          detail: sanitizeEvidenceText(instanceId),
+          fingerprint,
+          step: 'dashboard-scope-acquired',
+          type: 'lifecycle',
+        });
+        let scopeActive = true;
+        return {
+          instanceId,
+          portalRoot: portal.root,
+          release() {
+            if (!scopeActive) return;
+            scopeActive = false;
+            releaseScope(instanceId);
+          },
+        };
+      },
+      release() {
+        if (!active) return;
+        active = false;
+        for (const instanceId of [...ownedScopes]) releaseScope(instanceId);
+        activeLeases = Math.max(0, activeLeases - 1);
+        instrumentation?.record({ fingerprint, step: 'runtime-lease-released', type: 'lifecycle' });
+      },
+    };
+  };
+
+  return {
+    acquire(input, instrumentation) {
+      // Validation is synchronous so credential-shaped or malformed host input is never retained.
+      const config = normalizePocHostConfig(input);
+      const requested = createPocRuntimeIdentity(config);
+
+      if (fingerprint) {
+        const sameRequestFunction = activeConfig?.request === config.request;
+        if (fingerprint !== requested.fingerprint || !sameRequestFunction) {
+          instrumentation?.record({
+            fingerprint: requested.fingerprint,
+            step: 'runtime-conflict',
+            type: 'failure',
+          });
+          return Promise.reject(new PocRuntimeConflictError(fingerprint, requested.fingerprint));
+        }
+        if (status === 'failed') {
+          return Promise.reject(new Error('The page-scoped POC runtime previously failed to initialize.'));
+        }
+      } else {
+        fingerprint = requested.fingerprint;
+        activeConfig = config;
+        instrumentation?.record({ fingerprint, step: 'runtime-identity', type: 'registration' });
+      }
+
+      initialization ??= initialize(config, instrumentation);
+      return initialization.then((runtime) => makeLease(runtime, instrumentation));
+    },
+    inspect() {
+      return {
+        activeDashboardScopes: dashboardScopes.size,
+        activeLeases,
+        ...(failure === undefined ? {} : { failure }),
+        ...(fingerprint === undefined ? {} : { fingerprint }),
+        initializationSteps: [...initializationSteps],
+        ...(readyRuntime ? { moduleIdentities: structuredClone(readyRuntime.cohort.moduleIdentities) } : {}),
+        observedEventTypes: readyRuntime?.events.snapshotObservedTypes() ?? [],
+        portal: portalManager.inspect(),
+        status,
+      };
+    },
+  };
+}
+
+let pageCoordinator: PocRuntimeCoordinator | undefined;
+
+export function acquirePocRuntime(
+  config: PocHostConfig,
+  instrumentation?: PocRuntimeInstrumentationSink
+): Promise<PocRuntimeLease> {
+  pageCoordinator ??= createPocRuntimeCoordinator({
+    document: document as unknown as PocPortalDocument,
+    window: window as unknown as PocBootWindow & PocAssetWindow,
+  });
+  return pageCoordinator.acquire(config, instrumentation);
+}
+
+export function inspectPocRuntime(): PocRuntimeInspection {
+  return (
+    pageCoordinator?.inspect() ?? {
+      activeDashboardScopes: 0,
+      activeLeases: 0,
+      initializationSteps: [],
+      observedEventTypes: [],
+      portal: { activeReferences: 0, ownsRoot: false },
+      status: 'empty',
+    }
+  );
+}

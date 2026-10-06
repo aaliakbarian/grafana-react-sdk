@@ -41,6 +41,7 @@ describe('standalone POC host contract', () => {
 
     const module = (await import(pathToFileURL(viteConfigPath).href)) as {
       default: {
+        optimizeDeps?: { include?: string[] };
         resolve?: { dedupe?: string[] };
         server?: {
           allowedHosts?: string[];
@@ -73,6 +74,14 @@ describe('standalone POC host contract', () => {
         '@grafana/ui',
       ])
     );
+    expect(module.default.optimizeDeps?.include).toEqual([
+      '@grafana/data',
+      '@grafana/i18n',
+      '@grafana/runtime',
+      '@grafana/scenes',
+      '@grafana/schema',
+      '@grafana/ui',
+    ]);
 
     const proxy = module.default.server?.proxy?.['/grafana'];
     if (process.env.POC_VITE_HOST === undefined) {

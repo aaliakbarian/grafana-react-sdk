@@ -32,6 +32,7 @@ async function loadForbiddenImportClassifier() {
       importer?: string,
       options?: { sourceBridgeRoots?: string[] }
     ): { category: string; id: string; reason: string } | undefined;
+    isReviewedDormantRuntimeSystemImport(code: string, id: string): boolean;
   };
 }
 
@@ -217,7 +218,8 @@ describe('POC evidence instrumentation', () => {
   });
 
   it('classifies forbidden shell, routing, SystemJS, and boundary-breaking imports', async () => {
-    const { classifyForbiddenGrafanaImport } = await loadForbiddenImportClassifier();
+    const { classifyForbiddenGrafanaImport, isReviewedDormantRuntimeSystemImport } =
+      await loadForbiddenImportClassifier();
     const hostImporter = '/workspace/apps/poc-host/src/main.tsx';
     const bridgeImporter = '/workspace/packages/poc-grafana-bridge/src/panels/text.ts';
 
@@ -246,6 +248,15 @@ describe('POC evidence instrumentation', () => {
       'grafana-internal-outside-bridge'
     );
     expect(
+      classifyForbiddenGrafanaImport(
+        '@grafana/faro-core/internal',
+        '/workspace/node_modules/@grafana/faro-web-sdk/dist/esm/instrumentations/session.js'
+      )
+    ).toBeUndefined();
+    expect(
+      classifyForbiddenGrafanaImport('@grafana/faro-core/internal', hostImporter)?.category
+    ).toBe('grafana-internal-outside-bridge');
+    expect(
       classifyForbiddenGrafanaImport('/grafana/public/app/plugins/panel/text/module.tsx', hostImporter)
         ?.category
     ).toBe('grafana-application-source-outside-bridge');
@@ -253,6 +264,30 @@ describe('POC evidence instrumentation', () => {
       classifyForbiddenGrafanaImport('/grafana/public/app/plugins/panel/text/module.tsx', bridgeImporter)
     ).toBeUndefined();
     expect(classifyForbiddenGrafanaImport('@grafana/data', hostImporter)).toBeUndefined();
+    expect(
+      isReviewedDormantRuntimeSystemImport(
+        'return window.System.import(cssPath);',
+        '/workspace/node_modules/@grafana/runtime/dist/esm/utils/plugin.mjs?v=13.2.3'
+      )
+    ).toBe(true);
+    expect(
+      isReviewedDormantRuntimeSystemImport(
+        'const message = "pluginImportUtils should only be set once, when Grafana is starting."; return window.System.import(cssPath);',
+        '/workspace/apps/poc-host/node_modules/.vite/deps/esm-reviewedHash.js?v=13.2.3'
+      )
+    ).toBe(true);
+    expect(
+      isReviewedDormantRuntimeSystemImport(
+        'return window.System.import(userControlledPath);',
+        '/workspace/node_modules/@grafana/runtime/dist/esm/utils/plugin.mjs'
+      )
+    ).toBe(false);
+    expect(
+      isReviewedDormantRuntimeSystemImport(
+        'return window.System.import(cssPath);',
+        '/workspace/packages/poc-compat/src/runtime/unsafe.ts'
+      )
+    ).toBe(false);
   });
 
   it('records plugin loading with source identity and sanitized failures', () => {

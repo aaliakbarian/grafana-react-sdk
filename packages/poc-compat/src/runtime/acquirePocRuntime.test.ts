@@ -1,0 +1,303 @@
+import { createContext } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { PocHostConfig } from '../config/hostConfig';
+import type { GrafanaCohort } from '../config/loadGrafanaCohort';
+import type { PocMinimalBootData } from '../config/installBootData';
+import { createRuntimeEvidenceRecorder } from './runtimeIdentity';
+import {
+  createPocRuntimeCoordinator,
+  PocRuntimeConflictError,
+  type PocRuntimeCoordinatorEnvironment,
+} from './acquirePocRuntime';
+
+class FakeElement {
+  childElementCount = 0;
+  id = '';
+  parentElement: FakeElement | null = null;
+
+  constructor(
+    readonly tagName: string,
+    private readonly onId: (id: string, element: FakeElement) => void
+  ) {}
+
+  appendChild(child: FakeElement) {
+    child.parentElement = this;
+    this.childElementCount += 1;
+    if (child.id) this.onId(child.id, child);
+    return child;
+  }
+
+  remove() {
+    if (this.parentElement) {
+      this.parentElement.childElementCount -= 1;
+      this.parentElement = null;
+    }
+    if (this.id) this.onId(this.id, undefined as never);
+  }
+}
+
+function createEnvironment() {
+  const elements = new Map<string, FakeElement>();
+  const createdTags: string[] = [];
+  const setElement = (id: string, element: FakeElement | undefined) => {
+    if (element) elements.set(id, element);
+    else elements.delete(id);
+  };
+  const body = new FakeElement('body', setElement);
+  const document = {
+    body,
+    createElement(tagName: string) {
+      createdTags.push(tagName);
+      return new FakeElement(tagName, setElement);
+    },
+    getElementById(id: string) {
+      return elements.get(id) ?? null;
+    },
+  };
+  const window = {
+    __grafana_public_path__: undefined as string | undefined,
+    grafanaBootData: undefined as PocMinimalBootData | undefined,
+    location: {
+      hash: '',
+      href: 'http://localhost:5173/',
+      origin: 'http://localhost:5173',
+      pathname: '/',
+      search: '',
+    },
+  };
+  return { createdTags, document, window };
+}
+
+function createFakeCohort(bootData: unknown) {
+  const observedEvents: string[] = [];
+  const theme = { isLight: true };
+  let appEvents: unknown;
+  class FakeEventBus {
+    publish(event: { type?: string }) {
+      if (event.type) observedEvents.push(event.type);
+    }
+    getStream() {
+      return { subscribe: vi.fn() };
+    }
+    subscribe() {
+      return { unsubscribe: vi.fn() };
+    }
+    removeAllListeners() {}
+    newScopedBus() {
+      return this;
+    }
+  }
+  const locationService = {
+    getHistory: vi.fn(() => locationService),
+    getLocation: vi.fn(() => ({ hash: '', pathname: '/', search: '' })),
+    getLocationObservable: vi.fn(),
+    getSearch: vi.fn(() => new URLSearchParams()),
+    getSearchObject: vi.fn(() => ({})),
+    partial: vi.fn(),
+    push: vi.fn(),
+    reload: vi.fn(),
+    replace: vi.fn(),
+    update: vi.fn(),
+  };
+  const cohort = {
+    data: {
+      EventBusSrv: FakeEventBus,
+      ThemeContext: createContext(theme),
+    },
+    i18n: { initPluginTranslations: vi.fn(async () => ({ language: 'en-US' })) },
+    moduleIdentities: {
+      react: { copies: 1, labels: ['cohort:react'], version: '19.2.8' },
+      'react-dom': { copies: 1, labels: ['cohort:react-dom'], version: '19.2.8' },
+    },
+    runtime: {
+      config: { appSubUrl: '', bootData, namespace: 'default', theme2: theme },
+      getAppEvents: () => appEvents,
+      locationService,
+      setAppEvents: (value: unknown) => {
+        appEvents = value;
+      },
+    },
+    scenes: { loadResources: vi.fn() },
+    schema: {},
+    ui: {},
+    versions: {
+      '@grafana/data': '13.2.3',
+      '@grafana/i18n': '13.2.3',
+      '@grafana/runtime': '13.2.3',
+      '@grafana/scenes': '8.13.5',
+      '@grafana/schema': '13.2.3',
+      '@grafana/ui': '13.2.3',
+      react: '19.2.8',
+      'react-dom': '19.2.8',
+    },
+  } as unknown as GrafanaCohort;
+  return { cohort, locationService, observedEvents, theme };
+}
+
+function hostConfig(overrides: Record<string, unknown> = {}): PocHostConfig {
+  return {
+    assetBasePath: '/grafana/public/',
+    grafanaBasePath: '/grafana',
+    locale: 'en-US',
+    namespace: 'default',
+    panelCatalog: { identity: 'task5-empty-catalog', panelIds: [] },
+    request: vi.fn<typeof fetch>(),
+    theme: 'light',
+    timezone: 'browser',
+    ...overrides,
+  } as PocHostConfig;
+}
+
+function runtimeHarness() {
+  const browser = createEnvironment();
+  let cohortLoads = 0;
+  let fake: ReturnType<typeof createFakeCohort> | undefined;
+  const environment: PocRuntimeCoordinatorEnvironment = {
+    document: browser.document,
+    loadCohort: async ({ bootDataInstallation }) => {
+      if (!bootDataInstallation) throw new Error('Boot data must be installed before the cohort.');
+      cohortLoads += 1;
+      fake = createFakeCohort(bootDataInstallation.bootData);
+      return fake.cohort;
+    },
+    window: browser.window,
+  };
+  return {
+    ...browser,
+    coordinator: createPocRuntimeCoordinator(environment),
+    get cohortLoads() {
+      return cohortLoads;
+    },
+    get fake() {
+      if (!fake) throw new Error('Cohort was not loaded.');
+      return fake;
+    },
+  };
+}
+
+describe('POC compatibility runtime coordinator', () => {
+  it('initializes each named responsibility in order and reuses one compatible identity', async () => {
+    const harness = runtimeHarness();
+    const evidence = createRuntimeEvidenceRecorder();
+    const request = vi.fn<typeof fetch>();
+    const config = hostConfig({ request });
+
+    const first = await harness.coordinator.acquire(config, evidence);
+    const second = await harness.coordinator.acquire(config, evidence);
+
+    expect(first.fingerprint).toBe(second.fingerprint);
+    expect(harness.cohortLoads).toBe(1);
+    expect(harness.coordinator.inspect()).toMatchObject({
+      activeDashboardScopes: 0,
+      activeLeases: 2,
+      initializationSteps: [
+        'host-config-validated',
+        'boot-data-installed',
+        'asset-policy-installed',
+        'grafana-cohort-loaded',
+        'theme-selected',
+        'i18n-initialized',
+        'app-events-installed',
+        'location-policy-installed',
+        'runtime-ready',
+      ],
+      status: 'ready',
+    });
+    expect(harness.window.grafanaBootData).toBeDefined();
+    expect(harness.window.__grafana_public_path__).toBe('/grafana/public/');
+    expect(first.providerValues.theme).toBe(harness.fake.theme);
+    expect(harness.fake.cohort.runtime.config.theme2).toBe(first.providerValues.theme);
+    expect(harness.fake.cohort.i18n.initPluginTranslations).toHaveBeenCalledWith(
+      'grafana-scenes',
+      [harness.fake.cohort.scenes.loadResources]
+    );
+
+    first.release();
+    second.release();
+    expect(harness.coordinator.inspect().activeLeases).toBe(0);
+    expect(JSON.stringify(evidence.snapshot())).not.toMatch(/authorization|password|secret/i);
+  });
+
+  it('rejects a conflicting page identity with a typed error and preserves the first runtime', async () => {
+    const harness = runtimeHarness();
+    const first = await harness.coordinator.acquire(hostConfig());
+
+    await expect(
+      harness.coordinator.acquire(hostConfig({ grafanaBasePath: '/other-grafana' }))
+    ).rejects.toBeInstanceOf(PocRuntimeConflictError);
+
+    expect(harness.cohortLoads).toBe(1);
+    expect(harness.coordinator.inspect()).toMatchObject({
+      activeLeases: 1,
+      fingerprint: first.fingerprint,
+      status: 'ready',
+    });
+  });
+
+  it('rejects a different host request boundary even when visible identity fields match', async () => {
+    const harness = runtimeHarness();
+    const firstRequest = vi.fn<typeof fetch>();
+    await harness.coordinator.acquire(hostConfig({ request: firstRequest }));
+
+    await expect(
+      harness.coordinator.acquire(hostConfig({ request: vi.fn<typeof fetch>() }))
+    ).rejects.toBeInstanceOf(PocRuntimeConflictError);
+    expect(harness.cohortLoads).toBe(1);
+  });
+
+  it.each([
+    ['absolute Grafana URL', { grafanaBasePath: 'http://localhost:3000/grafana' }],
+    ['non-default namespace', { namespace: 'tenant-a' }],
+    ['dark theme', { theme: 'dark' }],
+    ['nonempty panel catalogue', { panelCatalog: { identity: 'too-early', panelIds: ['text'] } }],
+  ])('rejects %s before any global installation', (_case, override) => {
+    const harness = runtimeHarness();
+
+    expect(() => harness.coordinator.acquire(hostConfig(override))).toThrowError();
+    expect(harness.cohortLoads).toBe(0);
+    expect(harness.coordinator.inspect()).toMatchObject({ status: 'empty' });
+    expect(harness.window.grafanaBootData).toBeUndefined();
+  });
+
+  it('reference-counts one portal root and releases only POC-owned dashboard DOM', async () => {
+    const harness = runtimeHarness();
+    const runtime = await harness.coordinator.acquire(hostConfig());
+
+    const first = runtime.acquireDashboardScope('dashboard-one');
+    const second = runtime.acquireDashboardScope('dashboard-two');
+    expect(harness.document.getElementById('grafana-portal-container')).not.toBeNull();
+    expect(harness.coordinator.inspect().activeDashboardScopes).toBe(2);
+
+    first.release();
+    expect(harness.document.getElementById('grafana-portal-container')).not.toBeNull();
+    second.release();
+    expect(harness.document.getElementById('grafana-portal-container')).toBeNull();
+    expect(harness.createdTags).not.toContain('iframe');
+    expect(harness.coordinator.inspect().activeDashboardScopes).toBe(0);
+
+    runtime.release();
+  });
+
+  it('records event types, rejects navigation, and never retains credential-shaped config', async () => {
+    const harness = runtimeHarness();
+    const evidence = createRuntimeEvidenceRecorder();
+    const runtime = await harness.coordinator.acquire(hostConfig(), evidence);
+
+    runtime.appEvents.publish({ type: 'task5-test-event' } as never);
+    expect(harness.coordinator.inspect().observedEventTypes).toEqual(['task5-test-event']);
+    expect(() => harness.fake.locationService.push('/grafana/d/example')).toThrowError(
+      /navigation is unsupported/i
+    );
+    expect(() =>
+      harness.coordinator.acquire(
+        hostConfig({ authorization: 'Bearer must-not-persist' }),
+        evidence
+      )
+    ).toThrowError(/credential-bearing/i);
+    expect(JSON.stringify(harness.coordinator.inspect())).not.toContain('must-not-persist');
+    expect(JSON.stringify(evidence.snapshot())).not.toContain('must-not-persist');
+
+    runtime.release();
+  });
+});

@@ -48,6 +48,28 @@ function isInsideAllowedSourceBoundary(importer: string | undefined, roots: read
   return roots.some((root) => normalizedImporter.includes(normalizeModuleId(root)));
 }
 
+function isPublishedFaroSuiteInternalImport(source: string, importer: string | undefined): boolean {
+  return (
+    /^@grafana\/faro-[^/]+\/internal(?:\/|$)/.test(source) &&
+    importer !== undefined &&
+    /\/node_modules\/@grafana\/faro-[^/]+\//.test(normalizeModuleId(importer))
+  );
+}
+
+export function isReviewedDormantRuntimeSystemImport(code: string, id: string): boolean {
+  const normalizedId = normalizeModuleId(id);
+  const isPublishedUtility =
+    /\/node_modules\/@grafana\/runtime\/dist\/esm\/utils\/plugin\.mjs$/.test(normalizedId);
+  const isRuntimeOptimizerChunk =
+    /\/apps\/poc-host\/node_modules\/\.vite\/deps\/esm-[^/]+\.js$/.test(normalizedId) &&
+    code.includes('pluginImportUtils should only be set once, when Grafana is starting.');
+  if (!isPublishedUtility && !isRuntimeOptimizerChunk) {
+    return false;
+  }
+  const systemImports = code.match(/\b(?:window\s*\.\s*)?System\s*\.\s*import\s*\(/g) ?? [];
+  return systemImports.length === 1 && /return\s+window\.System\.import\(cssPath\)\s*;/.test(code);
+}
+
 export function classifyForbiddenGrafanaImport(
   source: string,
   importer?: string,
@@ -90,7 +112,11 @@ export function classifyForbiddenGrafanaImport(
   if (/(?:^|\/)systemjs(?:\/|$)|^systemjs$/i.test(id)) {
     return violation('arbitrary-systemjs', 'Arbitrary SystemJS plugin loading is forbidden.');
   }
-  if (/^@grafana\/[^/]+\/internal(?:\/|$)/.test(id) && !isInsideAllowedSourceBoundary(importer, roots)) {
+  if (
+    /^@grafana\/[^/]+\/internal(?:\/|$)/.test(id) &&
+    !isPublishedFaroSuiteInternalImport(id, importer) &&
+    !isInsideAllowedSourceBoundary(importer, roots)
+  ) {
     return violation(
       'grafana-internal-outside-bridge',
       'Grafana internal exports may only be evaluated inside the audited source bridge.'
@@ -115,6 +141,7 @@ export function forbiddenGrafanaImportPlugin(
     ...(options.sourceBridgeRoots ?? []),
   ];
   const inspectedModuleIds = new Set<string>();
+  const reviewedExemptions = new Set<string>();
   const violations = new Map<string, ForbiddenGrafanaImport>();
   const inspect = (source: string, importer?: string) => {
     inspectedModuleIds.add(normalizeModuleId(source));
@@ -130,6 +157,7 @@ export function forbiddenGrafanaImportPlugin(
     enforce: 'pre',
     buildStart() {
       inspectedModuleIds.clear();
+      reviewedExemptions.clear();
       violations.clear();
     },
     resolveId(source, importer) {
@@ -162,6 +190,10 @@ export function forbiddenGrafanaImportPlugin(
         this.error(`${finding.category}: ${finding.id} (${finding.reason})`);
       }
       if (/\bSystem\s*\.\s*import\s*\(/.test(code)) {
+        if (isReviewedDormantRuntimeSystemImport(code, id)) {
+          reviewedExemptions.add(normalizeModuleId(id));
+          return null;
+        }
         const finding: ForbiddenGrafanaImport = {
           category: 'arbitrary-systemjs',
           id: normalizeModuleId(id),
@@ -196,6 +228,9 @@ export function forbiddenGrafanaImportPlugin(
               .map((id) => evidenceModuleId(id, repositoryRoot))
               .sort(),
             policyVersion: 1,
+            reviewedExemptions: [...reviewedExemptions]
+              .map((id) => evidenceModuleId(id, repositoryRoot))
+              .sort(),
             violations: evidenceViolations,
           },
           null,

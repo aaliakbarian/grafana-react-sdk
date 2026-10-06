@@ -9,6 +9,19 @@ import { forbiddenGrafanaImportPlugin } from './build/forbiddenGrafanaImportPlug
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 export default defineConfig({
+  // These are the complete Task 5 dynamic Grafana package cohort. Pre-bundling
+  // just this boundary lets Vite normalize their CommonJS dependencies before
+  // the runtime coordinator imports them in the browser.
+  optimizeDeps: {
+    include: [
+      '@grafana/data',
+      '@grafana/i18n',
+      '@grafana/runtime',
+      '@grafana/scenes',
+      '@grafana/schema',
+      '@grafana/ui',
+    ],
+  },
   plugins: [
     forbiddenGrafanaImportPlugin({ repositoryRoot }),
     react(),
