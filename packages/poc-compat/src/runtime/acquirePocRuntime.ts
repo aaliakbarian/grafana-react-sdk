@@ -2,7 +2,11 @@ import type { BackendSrv } from '@grafana/runtime';
 
 import type { PocHostConfig, NormalizedPocHostConfig } from '../config/hostConfig';
 import { normalizePocHostConfig } from '../config/hostConfig';
-import type { LoadGrafanaCohortOptions, GrafanaCohort } from '../config/loadGrafanaCohort';
+import type {
+  LoadGrafanaCohortOptions,
+  GrafanaCohort,
+  PocScenesModule,
+} from '../config/loadGrafanaCohort';
 import { loadGrafanaCohort } from '../config/loadGrafanaCohort';
 import type { PocBootWindow } from '../config/installBootData';
 import { installBootData } from '../config/installBootData';
@@ -60,6 +64,7 @@ export interface PocRuntimeLease {
   readonly dashboardClient: PocDashboardClient;
   readonly fingerprint: string;
   readonly providerValues: PocGrafanaProviderValues;
+  readonly scenes: PocScenesModule;
   readonly transportEvidence: PocTransportEvidenceRecorder;
   acquireDashboardScope(instanceId: string): PocDashboardScope;
   release(): void;
@@ -235,6 +240,7 @@ export function createPocRuntimeCoordinator(
       dashboardClient: runtime.dashboardClient,
       fingerprint: fingerprint!,
       providerValues: runtime.providerValues,
+      scenes: runtime.cohort.scenes,
       transportEvidence: runtime.transportEvidence,
       acquireDashboardScope(instanceId) {
         if (!active) {

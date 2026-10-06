@@ -59,9 +59,19 @@ interface I18nModule {
   ): Promise<{ language: string }>;
 }
 
-interface ScenesModule {
-  loadResources(language: string): Promise<unknown>;
-}
+export type PocScenesModule = Pick<
+  typeof import('@grafana/scenes'),
+  | 'ConstantVariable'
+  | 'SceneDataTransformer'
+  | 'SceneGridItem'
+  | 'SceneGridLayout'
+  | 'SceneObjectBase'
+  | 'SceneQueryRunner'
+  | 'SceneTimeRange'
+  | 'SceneVariableSet'
+  | 'VizPanel'
+  | 'loadResources'
+>;
 
 export interface GrafanaCohort {
   readonly data: DataModule;
@@ -71,7 +81,7 @@ export interface GrafanaCohort {
     { copies: number; labels: string[]; version: string }
   >;
   readonly runtime: RuntimeModule;
-  readonly scenes: ScenesModule;
+  readonly scenes: PocScenesModule;
   readonly schema: Record<string, unknown>;
   readonly ui: Record<string, unknown>;
   readonly versions: PocPackageVersions;
@@ -206,7 +216,7 @@ export async function loadGrafanaCohort({
     i18n: loadedModules['@grafana/i18n'] as I18nModule,
     moduleIdentities: identityRegistry.snapshot(),
     runtime,
-    scenes: loadedModules['@grafana/scenes'] as ScenesModule,
+    scenes: loadedModules['@grafana/scenes'] as PocScenesModule,
     schema: loadedModules['@grafana/schema'] as Record<string, unknown>,
     ui: loadedModules['@grafana/ui'] as Record<string, unknown>,
     versions,

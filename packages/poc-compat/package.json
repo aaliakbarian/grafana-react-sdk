@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc6 -b --pretty false",
-    "test:unit": "vitest run src/toolchain.test.ts src/network/backendSrvAdapter.test.ts src/dashboard/dashboardClient.test.ts --environment node",
+    "test:unit": "vitest run src/toolchain.test.ts src/network/backendSrvAdapter.test.ts src/dashboard/dashboardClient.test.ts src/dashboard/preflightFixture.test.ts src/scenes/convertFixtureV1.test.ts src/scenes/sceneLifecycle.test.ts --environment node",
     "typecheck": "tsc6 --noEmit --pretty false"
   },
   "dependencies": {
