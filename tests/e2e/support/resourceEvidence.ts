@@ -163,22 +163,52 @@ export async function installResourceEvidence(page: Page): Promise<void> {
 
     const NativeResizeObserver = globalThis.ResizeObserver;
     if (NativeResizeObserver) {
+      const resizeObserverState = new WeakMap<
+        ResizeObserver,
+        { active: boolean; release: () => void; targets: Set<Element> }
+      >();
       globalThis.ResizeObserver = class TrackedResizeObserver extends NativeResizeObserver {
-        #active = true;
-        #release = acquire('resizeObserver');
+        constructor(callback: ResizeObserverCallback) {
+          // Actual delivery, record identity/order, scheduling, and callback error
+          // behavior remain owned by the browser's native observer.
+          super(callback);
+          resizeObserverState.set(this, {
+            active: true,
+            release: acquire('resizeObserver'),
+            targets: new Set(),
+          });
+        }
 
         override disconnect() {
           super.disconnect();
-          this.#release();
-          this.#active = false;
+          const state = resizeObserverState.get(this);
+          if (state?.active) {
+            state.release();
+            state.active = false;
+          }
+          state?.targets.clear();
         }
 
         override observe(target: Element, options?: ResizeObserverOptions) {
-          if (!this.#active) {
-            this.#release = acquire('resizeObserver');
-            this.#active = true;
-          }
           super.observe(target, options);
+          const state = resizeObserverState.get(this);
+          if (state) {
+            state.targets.add(target);
+            if (!state.active) {
+              state.release = acquire('resizeObserver');
+              state.active = true;
+            }
+          }
+        }
+
+        override unobserve(target: Element) {
+          super.unobserve(target);
+          const state = resizeObserverState.get(this);
+          state?.targets.delete(target);
+          if (state?.active && state.targets.size === 0) {
+            state.release();
+            state.active = false;
+          }
         }
       };
     }

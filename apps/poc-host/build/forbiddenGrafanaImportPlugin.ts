@@ -18,6 +18,7 @@ export interface ForbiddenGrafanaImport {
 export interface ForbiddenGrafanaImportOptions {
   repositoryRoot?: string;
   reportFile?: string;
+  sourceBridgeFiles?: string[];
   sourceBridgeRoots?: string[];
 }
 
@@ -28,14 +29,14 @@ function normalizeModuleId(id: string): string {
 function evidenceModuleId(id: string, repositoryRoot: string): string {
   const normalized = normalizeModuleId(id);
   const normalizedRoot = normalizeModuleId(repositoryRoot).replace(/\/$/, '');
-  if (normalized.startsWith(`${normalizedRoot}/`)) {
-    return `<repo>/${normalized.slice(normalizedRoot.length + 1)}`;
-  }
   if (process.env.GRAFANA_SOURCE_DIR) {
     const sourceRoot = normalizeModuleId(process.env.GRAFANA_SOURCE_DIR).replace(/\/$/, '');
     if (normalized.startsWith(`${sourceRoot}/`)) {
       return `<grafana-source>/${normalized.slice(sourceRoot.length + 1)}`;
     }
+  }
+  if (normalized.startsWith(`${normalizedRoot}/`)) {
+    return `<repo>/${normalized.slice(normalizedRoot.length + 1)}`;
   }
   return normalized;
 }
@@ -45,7 +46,34 @@ function isInsideAllowedSourceBoundary(importer: string | undefined, roots: read
     return false;
   }
   const normalizedImporter = normalizeModuleId(importer);
-  return roots.some((root) => normalizedImporter.includes(normalizeModuleId(root)));
+  return roots.some((root) => {
+    const normalizedRoot = normalizeModuleId(root).replace(/\/$/, '');
+    return (
+      normalizedImporter === normalizedRoot ||
+      normalizedImporter.startsWith(`${normalizedRoot}/`) ||
+      normalizedImporter.endsWith(normalizedRoot) ||
+      normalizedImporter.includes(`${normalizedRoot}/`)
+    );
+  });
+}
+
+function isBridgeModule(id: string | undefined): boolean {
+  return isInsideAllowedSourceBoundary(id, ['/packages/poc-grafana-bridge/']);
+}
+
+function isReviewedSource(
+  id: string | undefined,
+  roots: readonly string[],
+  files: readonly string[]
+): boolean {
+  if (!id) {
+    return false;
+  }
+  const normalizedId = normalizeModuleId(id);
+  return (
+    isInsideAllowedSourceBoundary(normalizedId, roots) ||
+    files.some((file) => normalizedId === normalizeModuleId(file))
+  );
 }
 
 function isPublishedFaroSuiteInternalImport(source: string, importer: string | undefined): boolean {
@@ -76,11 +104,22 @@ export function classifyForbiddenGrafanaImport(
   options: ForbiddenGrafanaImportOptions = {}
 ): ForbiddenGrafanaImport | undefined {
   const id = normalizeModuleId(source);
-  const roots = options.sourceBridgeRoots ?? ['/packages/poc-grafana-bridge/'];
+  const roots = options.sourceBridgeRoots ?? [];
+  const files = options.sourceBridgeFiles ?? [];
   const violation = (
     category: ForbiddenGrafanaImport['category'],
     reason: string
   ): ForbiddenGrafanaImport => ({ category, id, ...(importer ? { importer } : {}), reason });
+
+  if (
+    id === 'grafana-poc-text-panel' &&
+    !isInsideAllowedSourceBoundary(importer, ['/packages/poc-grafana-bridge/'])
+  ) {
+    return violation(
+      'grafana-application-source-outside-bridge',
+      'The audited Text source alias may only be imported from the POC Grafana source bridge.'
+    );
+  }
 
   if (/(?:^|\/)public\/app\/app(?:\.[cm]?[jt]sx?)?$/i.test(id)) {
     return violation('application-entrypoint', 'Grafana application entrypoint is forbidden.');
@@ -115,18 +154,24 @@ export function classifyForbiddenGrafanaImport(
   if (
     /^@grafana\/[^/]+\/internal(?:\/|$)/.test(id) &&
     !isPublishedFaroSuiteInternalImport(id, importer) &&
-    !isInsideAllowedSourceBoundary(importer, roots)
+    !isReviewedSource(importer, roots, files)
   ) {
     return violation(
       'grafana-internal-outside-bridge',
       'Grafana internal exports may only be evaluated inside the audited source bridge.'
     );
   }
-  if (/(?:^|\/)public\/app\//i.test(id) && !isInsideAllowedSourceBoundary(importer, roots)) {
-    return violation(
-      'grafana-application-source-outside-bridge',
-      'Grafana application source may only be imported by the audited source bridge.'
-    );
+  if (/(?:^|\/)public\/app\//i.test(id)) {
+    const sourceIsReviewed = isReviewedSource(id, roots, files);
+    const importerIsReviewed = isReviewedSource(importer, roots, files);
+    const admittedResolution =
+      sourceIsReviewed && (!importer || importerIsReviewed || isBridgeModule(importer));
+    if (!admittedResolution) {
+      return violation(
+        'grafana-application-source-outside-bridge',
+        'Grafana application source may only be imported by the audited source bridge.'
+      );
+    }
   }
   return undefined;
 }
@@ -136,16 +181,18 @@ export function forbiddenGrafanaImportPlugin(
 ): Plugin {
   const repositoryRoot = options.repositoryRoot ?? process.cwd();
   const sourceBridgeRoots = [
-    '/packages/poc-grafana-bridge/',
-    ...(process.env.GRAFANA_SOURCE_DIR ? [process.env.GRAFANA_SOURCE_DIR] : []),
     ...(options.sourceBridgeRoots ?? []),
   ];
+  const sourceBridgeFiles = [...(options.sourceBridgeFiles ?? [])];
   const inspectedModuleIds = new Set<string>();
   const reviewedExemptions = new Set<string>();
   const violations = new Map<string, ForbiddenGrafanaImport>();
   const inspect = (source: string, importer?: string) => {
     inspectedModuleIds.add(normalizeModuleId(source));
-    const finding = classifyForbiddenGrafanaImport(source, importer, { sourceBridgeRoots });
+    const finding = classifyForbiddenGrafanaImport(source, importer, {
+      sourceBridgeFiles,
+      sourceBridgeRoots,
+    });
     if (finding) {
       violations.set(`${finding.category}:${finding.id}:${finding.importer ?? ''}`, finding);
     }

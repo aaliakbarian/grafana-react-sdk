@@ -10,14 +10,14 @@ export interface BundleEvidencePluginOptions {
 function evidenceModuleId(id: string, repositoryRoot: string): string {
   const normalized = id.replace(/^\0+/, '').replaceAll('\\', '/');
   const normalizedRoot = repositoryRoot.replaceAll('\\', '/').replace(/\/$/, '');
-  if (normalized.startsWith(`${normalizedRoot}/`)) {
-    return `<repo>/${normalized.slice(normalizedRoot.length + 1)}`;
-  }
   if (process.env.GRAFANA_SOURCE_DIR) {
     const sourceRoot = process.env.GRAFANA_SOURCE_DIR.replaceAll('\\', '/').replace(/\/$/, '');
     if (normalized.startsWith(`${sourceRoot}/`)) {
       return `<grafana-source>/${normalized.slice(sourceRoot.length + 1)}`;
     }
+  }
+  if (normalized.startsWith(`${normalizedRoot}/`)) {
+    return `<repo>/${normalized.slice(normalizedRoot.length + 1)}`;
   }
   return normalized;
 }

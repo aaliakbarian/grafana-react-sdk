@@ -3,7 +3,15 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "tsBuildInfoFile": "./dist/poc-grafana-bridge.tsbuildinfo"
+    "tsBuildInfoFile": "./dist/poc-grafana-bridge.tsbuildinfo",
+    "types": [
+      "node",
+      "vitest/globals"
+    ]
   },
-  "files": []
+  "include": [
+    "src/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ]
 }

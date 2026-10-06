@@ -632,9 +632,11 @@ __metadata:
     "@grafana/ui": "npm:13.2.3"
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.4"
+    dangerously-set-html-content: "npm:1.1.1"
     react: "npm:19.2.8"
     react-dom: "npm:19.2.8"
     react-router-dom: "npm:6.30.3"
+    react-use: "npm:17.6.1"
     rxjs: "npm:7.8.2"
     uplot: "npm:1.6.32"
   languageName: unknown
@@ -2423,6 +2425,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"dangerously-set-html-content@npm:1.1.1":
+  version: 1.1.1
+  resolution: "dangerously-set-html-content@npm:1.1.1"
+  peerDependencies:
+    react: ">=18.2.0"
+  checksum: 10/857108c451273d9dab39d8444f23036cd47df000d416e54150061905d5c5ba4c749188de9294feea64e465addcf1aac236f4c171bb2fd5deb755292e4de95e10
+  languageName: node
+  linkType: hard
+
 "date-fns@npm:^4.1.0":
   version: 4.4.0
   resolution: "date-fns@npm:4.4.0"
@@ -4087,7 +4098,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-use@npm:^17.5.0, react-use@npm:^17.6.1":
+"react-use@npm:17.6.1, react-use@npm:^17.5.0, react-use@npm:^17.6.1":
   version: 17.6.1
   resolution: "react-use@npm:17.6.1"
   dependencies:

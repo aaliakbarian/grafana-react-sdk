@@ -30,7 +30,7 @@ async function loadForbiddenImportClassifier() {
     classifyForbiddenGrafanaImport(
       source: string,
       importer?: string,
-      options?: { sourceBridgeRoots?: string[] }
+      options?: { sourceBridgeFiles?: string[]; sourceBridgeRoots?: string[] }
     ): { category: string; id: string; reason: string } | undefined;
     isReviewedDormantRuntimeSystemImport(code: string, id: string): boolean;
   };
@@ -282,7 +282,62 @@ describe('POC evidence instrumentation', () => {
     ).toBe('grafana-application-source-outside-bridge');
     expect(
       classifyForbiddenGrafanaImport('/grafana/public/app/plugins/panel/text/module.tsx', bridgeImporter)
+        ?.category
+    ).toBe('grafana-application-source-outside-bridge');
+    expect(
+      classifyForbiddenGrafanaImport('grafana-poc-text-panel', hostImporter)?.category
+    ).toBe('grafana-application-source-outside-bridge');
+    expect(classifyForbiddenGrafanaImport('grafana-poc-text-panel', bridgeImporter)).toBeUndefined();
+    expect(
+      classifyForbiddenGrafanaImport(
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/plugins/panel/text/v1/module.tsx',
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/plugins/panel/text/v1/module.tsx',
+        {
+          sourceBridgeRoots: [
+            '/workspace/.grafana-source/grafana-v13.2.3/public/app/plugins/panel/text',
+          ],
+        }
+      )
     ).toBeUndefined();
+    expect(
+      classifyForbiddenGrafanaImport(
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/core/config.ts',
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/core/config.ts',
+        {
+          sourceBridgeFiles: [
+            '/workspace/.grafana-source/grafana-v13.2.3/public/app/core/config.ts',
+          ],
+        }
+      )
+    ).toBeUndefined();
+    expect(
+      classifyForbiddenGrafanaImport(
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/core/config',
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/plugins/panel/text/TextPanel.tsx',
+        {
+          sourceBridgeFiles: [
+            '/workspace/.grafana-source/grafana-v13.2.3/public/app/core/config',
+          ],
+          sourceBridgeRoots: [
+            '/workspace/.grafana-source/grafana-v13.2.3/public/app/plugins/panel/text',
+          ],
+        }
+      )
+    ).toBeUndefined();
+    expect(
+      classifyForbiddenGrafanaImport(
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/core/config/neighbor.ts',
+        '/workspace/.grafana-source/grafana-v13.2.3/public/app/plugins/panel/text/TextPanel.tsx',
+        {
+          sourceBridgeFiles: [
+            '/workspace/.grafana-source/grafana-v13.2.3/public/app/core/config',
+          ],
+          sourceBridgeRoots: [
+            '/workspace/.grafana-source/grafana-v13.2.3/public/app/plugins/panel/text',
+          ],
+        }
+      )?.category
+    ).toBe('grafana-application-source-outside-bridge');
     expect(classifyForbiddenGrafanaImport('@grafana/data', hostImporter)).toBeUndefined();
     expect(
       isReviewedDormantRuntimeSystemImport(
