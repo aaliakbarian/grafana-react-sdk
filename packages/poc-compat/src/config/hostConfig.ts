@@ -1,19 +1,20 @@
+import {
+  isTextRuntimePanelCatalog,
+  POC_GATE_A_TEXT_PANEL_CATALOG,
+  type PocRuntimePanelCatalog,
+} from '../panels/panelCatalog';
+
 export const POC_GRAFANA_NAMESPACE = 'default' as const;
 export const POC_LOCALE = 'en-US' as const;
 export const POC_THEME = 'light' as const;
 export const POC_TIMEZONE = 'browser' as const;
-
-export interface PocPanelCatalogPlaceholder {
-  readonly identity: string;
-  readonly panelIds: readonly [];
-}
 
 export interface PocHostConfig {
   readonly assetBasePath: string;
   readonly grafanaBasePath: string;
   readonly locale: typeof POC_LOCALE;
   readonly namespace: typeof POC_GRAFANA_NAMESPACE;
-  readonly panelCatalog: PocPanelCatalogPlaceholder;
+  readonly panelCatalog: PocRuntimePanelCatalog;
   readonly request: typeof fetch;
   readonly theme: typeof POC_THEME;
   readonly timezone: typeof POC_TIMEZONE;
@@ -102,14 +103,23 @@ export function normalizePocHostConfig(input: PocHostConfig): NormalizedPocHostC
   if (typeof input.request !== 'function') {
     throw new PocHostConfigError('request must be a host-owned fetch-compatible function.');
   }
-  if (
-    !input.panelCatalog ||
-    typeof input.panelCatalog.identity !== 'string' ||
-    input.panelCatalog.identity.length === 0 ||
-    !Array.isArray(input.panelCatalog.panelIds) ||
-    input.panelCatalog.panelIds.length !== 0
-  ) {
-    throw new PocHostConfigError('Task 5 requires a named, empty panel catalogue placeholder.');
+  if (!input.panelCatalog || typeof input.panelCatalog.identity !== 'string') {
+    throw new PocHostConfigError('The POC runtime requires a named panel catalogue.');
+  }
+  const panelIds = input.panelCatalog.panelIds;
+  const emptyCatalog =
+    input.panelCatalog.identity.length > 0 && Array.isArray(panelIds) && panelIds.length === 0;
+  const textCatalog =
+    Array.isArray(panelIds) &&
+    panelIds.length === 1 &&
+    panelIds[0] === 'text' &&
+    isTextRuntimePanelCatalog(input.panelCatalog) &&
+    typeof input.panelCatalog.pluginImportUtils?.getPanelPluginFromCache === 'function' &&
+    typeof input.panelCatalog.pluginImportUtils?.importPanelPlugin === 'function';
+  if (!emptyCatalog && !textCatalog) {
+    throw new PocHostConfigError(
+      `Only an empty catalogue or ${POC_GATE_A_TEXT_PANEL_CATALOG.identity} with the closed Text importer is permitted.`
+    );
   }
 
   return {
@@ -117,10 +127,13 @@ export function normalizePocHostConfig(input: PocHostConfig): NormalizedPocHostC
     grafanaBasePath: normalizeRelativePath(input.grafanaBasePath, 'grafanaBasePath', false),
     locale: input.locale,
     namespace: input.namespace,
-    panelCatalog: {
-      identity: input.panelCatalog.identity,
-      panelIds: [],
-    },
+    panelCatalog: textCatalog
+      ? {
+          identity: POC_GATE_A_TEXT_PANEL_CATALOG.identity,
+          panelIds: ['text'],
+          pluginImportUtils: input.panelCatalog.pluginImportUtils,
+        }
+      : { identity: input.panelCatalog.identity, panelIds: [] },
     request: input.request,
     theme: input.theme,
     timezone: input.timezone,

@@ -63,6 +63,7 @@ describe('Task 8 Text panel catalogue', () => {
     expect(catalog.getPanelPluginFromCache('text')).toBe(plugin);
     expect(plugin.meta).toMatchObject({
       id: 'text',
+      info: { version: '13.2.3' },
       module: TEXT_MODULE_IDENTITY,
       name: 'Text',
       skipDataQuery: true,

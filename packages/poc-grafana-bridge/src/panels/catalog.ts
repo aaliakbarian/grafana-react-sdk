@@ -1,4 +1,4 @@
-import type { PanelPlugin, PanelPluginMeta } from '@grafana/data';
+import type { PanelPlugin, PanelPluginMeta, PluginMetaInfo } from '@grafana/data';
 
 import {
   GRAFANA_SOURCE_COMMIT,
@@ -41,6 +41,15 @@ function attachTextMetadata(plugin: PanelPlugin): PanelPlugin {
   plugin.meta = {
     ...plugin.meta,
     id: TEXT_PLUGIN_ID,
+    info: {
+      author: { name: 'Grafana Labs' },
+      description: 'Built-in Grafana Text panel.',
+      links: [],
+      logos: { large: '', small: '' },
+      screenshots: [],
+      updated: '',
+      version: GRAFANA_SOURCE_VERSION,
+    } as PluginMetaInfo,
     name: 'Text',
     type: 'panel',
     version: GRAFANA_SOURCE_VERSION,

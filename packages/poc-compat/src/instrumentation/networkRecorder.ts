@@ -86,7 +86,8 @@ function headerEntries(headers: HeaderInput | undefined): Array<[string, string]
 export function sanitizeHeaders(headers: HeaderInput | undefined): Record<string, string> {
   return Object.fromEntries(
     headerEntries(headers)
-      .map(([name, value]) => [name.toLowerCase(), sensitiveName.test(name) ? REDACTED : value] as const)
+      .filter(([name]) => !sensitiveName.test(name))
+      .map(([name, value]) => [name.toLowerCase(), value] as const)
       .sort(([left], [right]) => left.localeCompare(right))
   );
 }

@@ -44,10 +44,7 @@ function errorCategory(error: unknown): string {
   return 'dashboard-conversion-failed';
 }
 
-/**
- * Disposable Task 7 boundary. It deliberately renders only graph-ready status:
- * actual Scene/VizPanel activation and plugin rendering begin in Task 8 and later.
- */
+/** Disposable Gate A boundary. It renders only the converter-admitted Scene graph. */
 export function GrafanaDashboard({
   catalog,
   conversionEvidence,
@@ -67,6 +64,10 @@ export function GrafanaDashboard({
 
     void (async () => {
       try {
+        // React StrictMode rehearses setup/cleanup synchronously. Yield once so
+        // the rehearsal cannot start and poison a shared discovery request.
+        await Promise.resolve();
+        if (!generation.isCurrent()) return;
         const input = await runtime.dashboardClient.loadByUid(uid, { signal: generation.signal });
         const { convertFixtureV1ToScene } = await import('../scenes/convertFixtureV1');
         const scene = convertFixtureV1ToScene({
@@ -99,18 +100,24 @@ export function GrafanaDashboard({
   if (state.status === 'error') {
     content = <div data-poc-dashboard-error={state.category}>Dashboard unavailable.</div>;
   } else if (state.status === 'ready') {
+    const Scene = state.scene.Component;
     content = (
       <div
+        className="poc-grafana-dashboard"
         data-poc-dashboard-panel-count={state.scene.state.legacyPanelIds.length}
-        data-poc-dashboard-status="scene-ready"
+        data-poc-dashboard-status="rendering"
         data-poc-dashboard-uid={state.scene.state.uid}
       >
-        Scene graph ready. Panel rendering is intentionally disabled in Task 7.
+        <Scene model={state.scene} />
       </div>
     );
   } else {
     content = <div data-poc-dashboard-status="loading">Loading dashboard definition.</div>;
   }
 
-  return <PocSceneErrorBoundary onError={onError}>{content}</PocSceneErrorBoundary>;
+  return (
+    <PocSceneErrorBoundary key={uid} onError={onError}>
+      {content}
+    </PocSceneErrorBoundary>
+  );
 }

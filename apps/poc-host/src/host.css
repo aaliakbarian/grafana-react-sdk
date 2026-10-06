@@ -51,3 +51,25 @@
   border-radius: 8px;
   background: #eef1f7;
 }
+
+.poc-host__gate-controls {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px;
+}
+
+.poc-host__gate-controls button {
+  padding: 6px 10px;
+  border: 1px solid #3159c6;
+  border-radius: 4px;
+  color: #17243e;
+  background: #fff;
+  font: inherit;
+}
+
+.poc-grafana-dashboard {
+  width: 100%;
+  min-height: 200px;
+  color: #1f1f20;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}

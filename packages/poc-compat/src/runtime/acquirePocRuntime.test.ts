@@ -74,6 +74,8 @@ function createFakeCohort(bootData: unknown) {
   const theme = { isLight: true };
   let appEvents: unknown;
   let backendSrv: unknown;
+  let pluginImportUtils: unknown;
+  const standardEditorsRegistry = { setInit: vi.fn() };
   class FakeEventBus {
     publish(event: { type?: string }) {
       if (event.type) observedEvents.push(event.type);
@@ -105,6 +107,7 @@ function createFakeCohort(bootData: unknown) {
     data: {
       EventBusSrv: FakeEventBus,
       ThemeContext: createContext(theme),
+      standardEditorsRegistry,
     },
     i18n: { initPluginTranslations: vi.fn(async () => ({ language: 'en-US' })) },
     moduleIdentities: {
@@ -114,10 +117,14 @@ function createFakeCohort(bootData: unknown) {
     runtime: {
       config: { appSubUrl: '', bootData, namespace: 'default', theme2: theme },
       getBackendSrv: () => backendSrv,
+      getPluginImportUtils: () => pluginImportUtils,
       getAppEvents: () => appEvents,
       locationService,
       setBackendSrv: (value: unknown) => {
         backendSrv = value;
+      },
+      setPluginImportUtils: (value: unknown) => {
+        pluginImportUtils = value;
       },
       setAppEvents: (value: unknown) => {
         appEvents = value;
@@ -137,7 +144,7 @@ function createFakeCohort(bootData: unknown) {
       'react-dom': '19.2.8',
     },
   } as unknown as GrafanaCohort;
-  return { cohort, locationService, observedEvents, theme };
+  return { cohort, locationService, observedEvents, standardEditorsRegistry, theme };
 }
 
 function hostConfig(overrides: Record<string, unknown> = {}): PocHostConfig {
@@ -252,6 +259,51 @@ describe('POC compatibility runtime coordinator', () => {
       harness.coordinator.acquire(hostConfig({ request: vi.fn<typeof fetch>() }))
     ).rejects.toBeInstanceOf(PocRuntimeConflictError);
     expect(harness.cohortLoads).toBe(1);
+  });
+
+  it('installs the one closed Gate A Text catalogue once and reuses its exact identity', async () => {
+    const harness = runtimeHarness();
+    const request = vi.fn<typeof fetch>();
+    const pluginImportUtils = {
+      getPanelPluginFromCache: vi.fn(),
+      importPanelPlugin: vi.fn(),
+    };
+    const config = hostConfig({
+      panelCatalog: {
+        identity: 'gate-a-text-v1',
+        panelIds: ['text'],
+        pluginImportUtils,
+      },
+      request,
+    });
+
+    const first = await harness.coordinator.acquire(config);
+    const second = await harness.coordinator.acquire(config);
+
+    expect(harness.fake.cohort.runtime.getPluginImportUtils()).toBe(pluginImportUtils);
+    expect(harness.fake.standardEditorsRegistry.setInit).toHaveBeenCalledOnce();
+    const initializer = harness.fake.standardEditorsRegistry.setInit.mock.calls[0]?.[0];
+    expect(initializer?.().map((editor: { id: string }) => editor.id)).toEqual([
+      'radio',
+      'select',
+      'boolean',
+    ]);
+    expect(harness.coordinator.inspect().initializationSteps).toContain('panel-catalog-installed');
+    await expect(
+      harness.coordinator.acquire({
+        ...config,
+        panelCatalog: {
+          identity: 'gate-a-text-v1',
+          panelIds: ['text'],
+          pluginImportUtils: {
+            getPanelPluginFromCache: vi.fn(),
+            importPanelPlugin: vi.fn(),
+          },
+        },
+      })
+    ).rejects.toBeInstanceOf(PocRuntimeConflictError);
+    first.release();
+    second.release();
   });
 
   it.each([

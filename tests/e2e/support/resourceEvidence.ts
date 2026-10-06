@@ -162,6 +162,7 @@ export async function installResourceEvidence(page: Page): Promise<void> {
     };
 
     const NativeResizeObserver = globalThis.ResizeObserver;
+    const resizeObserverEvents: Array<{ event: 'construct' | 'disconnect' | 'unobserve'; stack?: string }> = [];
     if (NativeResizeObserver) {
       const resizeObserverState = new WeakMap<
         ResizeObserver,
@@ -172,15 +173,23 @@ export async function installResourceEvidence(page: Page): Promise<void> {
           // Actual delivery, record identity/order, scheduling, and callback error
           // behavior remain owned by the browser's native observer.
           super(callback);
+          resizeObserverEvents.push({
+            event: 'construct',
+            stack: (new Error('ResizeObserver constructed').stack ?? '<stack unavailable>')
+              .split('\n')
+              .slice(1, 8)
+              .join('\n'),
+          });
           resizeObserverState.set(this, {
-            active: true,
-            release: acquire('resizeObserver'),
+            active: false,
+            release: () => undefined,
             targets: new Set(),
           });
         }
 
         override disconnect() {
           super.disconnect();
+          resizeObserverEvents.push({ event: 'disconnect' });
           const state = resizeObserverState.get(this);
           if (state?.active) {
             state.release();
@@ -203,6 +212,7 @@ export async function installResourceEvidence(page: Page): Promise<void> {
 
         override unobserve(target: Element) {
           super.unobserve(target);
+          resizeObserverEvents.push({ event: 'unobserve' });
           const state = resizeObserverState.get(this);
           state?.targets.delete(target);
           if (state?.active && state.targets.size === 0) {
@@ -217,9 +227,16 @@ export async function installResourceEvidence(page: Page): Promise<void> {
       MutationObserver,
       { active: boolean; release: () => void }
     >();
+    const mutationObserverCreations: string[] = [];
     globalThis.MutationObserver = class TrackedMutationObserver extends NativeMutationObserver {
       constructor(callback: MutationCallback) {
         super(callback);
+        mutationObserverCreations.push(
+          (new Error('MutationObserver constructed').stack ?? '<stack unavailable>')
+            .split('\n')
+            .slice(1, 8)
+            .join('\n')
+        );
         mutationObserverState.set(this, {
           active: true,
           release: acquire('mutationObserver'),
@@ -308,6 +325,12 @@ export async function installResourceEvidence(page: Page): Promise<void> {
           return acquire(kind, lifetime);
         },
         snapshot,
+        mutationObserverCreations() {
+          return [...mutationObserverCreations];
+        },
+        resizeObserverEvents() {
+          return resizeObserverEvents.map((event) => ({ ...event }));
+        },
       },
       writable: false,
     });

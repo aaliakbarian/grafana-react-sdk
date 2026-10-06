@@ -1,3 +1,5 @@
+/// <reference path="../grafana-source-modules.d.ts" />
+
 import type { PanelPlugin } from '@grafana/data';
 
 interface GrafanaTextPanelModule {

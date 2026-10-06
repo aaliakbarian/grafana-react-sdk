@@ -19,6 +19,10 @@ import { sanitizeEvidenceText } from '../instrumentation/networkRecorder';
 import { createResourceTracker } from '../instrumentation/resourceTracker';
 import { installLocationPolicy } from '../location/locationPolicy';
 import {
+  installGateATextOptionEditors,
+  isTextRuntimePanelCatalog,
+} from '../panels/panelCatalog';
+import {
   createPocBackendSrv,
   createTransportEvidenceRecorder,
   type PocTransportEvidenceRecorder,
@@ -45,6 +49,8 @@ export type PocRuntimeInitializationStep =
   | 'boot-data-installed'
   | 'asset-policy-installed'
   | 'grafana-cohort-loaded'
+  | 'panel-catalog-installed'
+  | 'text-option-editors-installed'
   | 'theme-selected'
   | 'i18n-initialized'
   | 'backend-transport-installed'
@@ -148,6 +154,16 @@ export function createPocRuntimeCoordinator(
         target: environment.window,
       });
       recordStep('grafana-cohort-loaded', instrumentation);
+
+      if (isTextRuntimePanelCatalog(config.panelCatalog)) {
+        installGateATextOptionEditors(cohort.data.standardEditorsRegistry);
+        recordStep('text-option-editors-installed', instrumentation);
+        cohort.runtime.setPluginImportUtils(config.panelCatalog.pluginImportUtils);
+        if (cohort.runtime.getPluginImportUtils() !== config.panelCatalog.pluginImportUtils) {
+          throw new Error('Grafana Runtime did not retain the closed Text panel catalogue identity.');
+        }
+        recordStep('panel-catalog-installed', instrumentation);
+      }
 
       const theme = createPocTheme(cohort);
       const providerValues: PocGrafanaProviderValues = {
@@ -286,8 +302,17 @@ export function createPocRuntimeCoordinator(
       const requested = createPocRuntimeIdentity(config);
 
       if (fingerprint) {
-        const sameRequestFunction = activeConfig?.request === config.request;
-        if (fingerprint !== requested.fingerprint || !sameRequestFunction) {
+        if (!activeConfig) {
+          return Promise.reject(new Error('The POC runtime identity exists without active configuration.'));
+        }
+        const sameRequestFunction = activeConfig.request === config.request;
+        const samePluginImportBoundary =
+          activeConfig?.panelCatalog.panelIds.length === 0
+            ? config.panelCatalog.panelIds.length === 0
+            : isTextRuntimePanelCatalog(activeConfig.panelCatalog) &&
+              isTextRuntimePanelCatalog(config.panelCatalog) &&
+              activeConfig.panelCatalog.pluginImportUtils === config.panelCatalog.pluginImportUtils;
+        if (fingerprint !== requested.fingerprint || !sameRequestFunction || !samePluginImportBoundary) {
           instrumentation?.record({
             fingerprint: requested.fingerprint,
             step: 'runtime-conflict',

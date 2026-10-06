@@ -14,7 +14,9 @@ async function expectResizeObserverResourcesClean(page: Page, label: string): Pr
   expect(resources.dom.iframeElements).toBe(0);
 }
 
-test('constructs the instrumented ResizeObserver in the browser realm', async ({ page }) => {
+test('constructs the instrumented ResizeObserver without claiming an active resource', async ({
+  page,
+}) => {
   await installResourceEvidence(page);
   await page.goto('/');
 
@@ -36,7 +38,7 @@ test('constructs the instrumented ResizeObserver in the browser realm', async ({
   });
 
   expect(result).toEqual({
-    activeAfterConstruction: 1,
+    activeAfterConstruction: 0,
     isInstrumentedInstance: true,
     usesInstalledPrototype: true,
   });
@@ -152,8 +154,13 @@ test('tracks multiple independent observers and releases both', async ({ page })
   await page.goto('/');
 
   const result = await page.evaluate(() => {
+    const firstTarget = document.createElement('section');
+    const secondTarget = document.createElement('section');
+    document.body.append(firstTarget, secondTarget);
     const first = new ResizeObserver(() => undefined);
     const second = new ResizeObserver(() => undefined);
+    first.observe(firstTarget);
+    second.observe(secondTarget);
     const evidence = (
       globalThis as typeof globalThis & {
         __POC_RESOURCE_EVIDENCE__: {
@@ -165,6 +172,8 @@ test('tracks multiple independent observers and releases both', async ({ page })
     first.disconnect();
     const activeAfterFirstDisconnect = evidence.snapshot('one-resize-observer').page.resizeObserver;
     second.disconnect();
+    firstTarget.remove();
+    secondTarget.remove();
     return { activeAfterFirstDisconnect, activeTogether };
   });
 

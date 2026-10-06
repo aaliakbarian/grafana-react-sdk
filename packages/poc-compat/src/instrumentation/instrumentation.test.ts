@@ -37,7 +37,7 @@ async function loadForbiddenImportClassifier() {
 }
 
 describe('POC evidence instrumentation', () => {
-  it('redacts credential-bearing headers without discarding safe request metadata', () => {
+  it('omits credential-bearing headers without discarding safe request metadata', () => {
     expect(
       sanitizeHeaders({
         Authorization: 'Bearer secret-token',
@@ -48,11 +48,7 @@ describe('POC evidence instrumentation', () => {
         'X-Request-Id': 'request-42',
       })
     ).toEqual({
-      authorization: '<redacted>',
-      cookie: '<redacted>',
       'content-type': 'application/json',
-      'set-cookie': '<redacted>',
-      'x-api-key': '<redacted>',
       'x-request-id': 'request-42',
     });
   });

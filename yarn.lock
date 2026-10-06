@@ -617,7 +617,7 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@grafana-react-sdk/poc-grafana-bridge@workspace:packages/poc-grafana-bridge":
+"@grafana-react-sdk/poc-grafana-bridge@workspace:*, @grafana-react-sdk/poc-grafana-bridge@workspace:packages/poc-grafana-bridge":
   version: 0.0.0-use.local
   resolution: "@grafana-react-sdk/poc-grafana-bridge@workspace:packages/poc-grafana-bridge"
   dependencies:
@@ -647,6 +647,7 @@ __metadata:
   resolution: "@grafana-react-sdk/poc-host@workspace:apps/poc-host"
   dependencies:
     "@grafana-react-sdk/poc-compat": "workspace:*"
+    "@grafana-react-sdk/poc-grafana-bridge": "workspace:*"
     "@types/react": "npm:19.2.18"
     "@types/react-dom": "npm:19.2.4"
     "@vitejs/plugin-react": "npm:6.1.1"

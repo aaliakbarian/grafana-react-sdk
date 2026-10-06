@@ -6,6 +6,10 @@ import {
   type RuntimeModuleIdentityRegistry,
 } from '../instrumentation/runtimeIdentity';
 import type { PocBootDataInstallation, PocBootWindow } from './installBootData';
+import type {
+  PocPluginImportUtils,
+  PocStandardEditorsRegistry,
+} from '../panels/panelCatalog';
 
 export const POC_PACKAGE_VERSIONS = {
   '@grafana/data': '13.2.3',
@@ -41,15 +45,18 @@ interface RuntimeModule {
     readonly theme2: PocTheme;
   };
   getBackendSrv(): BackendSrv;
+  getPluginImportUtils(): PocPluginImportUtils;
   getAppEvents(): unknown;
   readonly locationService: Record<string, unknown>;
   setBackendSrv(instance: BackendSrv): void;
+  setPluginImportUtils(utils: PocPluginImportUtils): void;
   setAppEvents(instance: PocEventBus): void;
 }
 
 interface DataModule {
   readonly EventBusSrv: new () => PocEventBus;
   readonly ThemeContext: Context<PocTheme>;
+  readonly standardEditorsRegistry: PocStandardEditorsRegistry;
 }
 
 interface I18nModule {

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@grafana-react-sdk/poc-compat": "workspace:*",
+    "@grafana-react-sdk/poc-grafana-bridge": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

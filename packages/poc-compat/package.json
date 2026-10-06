@@ -4,6 +4,9 @@
   "private": true,
   "description": "Disposable private Grafana compatibility research code; never publish.",
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "build": "tsc6 -b --pretty false",
     "test:unit": "vitest run src/toolchain.test.ts src/network/backendSrvAdapter.test.ts src/dashboard/dashboardClient.test.ts src/dashboard/preflightFixture.test.ts src/scenes/convertFixtureV1.test.ts src/scenes/sceneLifecycle.test.ts --environment node",
