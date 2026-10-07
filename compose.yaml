@@ -15,6 +15,7 @@ services:
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
       POC_GRAFANA_PROXY_TARGET: http://grafana:3000
       POC_TEXT_PANEL_EXPERIMENT: "1"
+      POC_TESTDATA_DATASOURCE_EXPERIMENT: "1"
       POC_VITE_HOST: 0.0.0.0
       GRAFANA_SOURCE_DIR: /workspace/.grafana-source/grafana-v13.2.3
       YARN_GLOBAL_FOLDER: /var/cache/yarn

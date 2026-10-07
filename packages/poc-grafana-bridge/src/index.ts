@@ -10,3 +10,9 @@ export type {
   PanelPluginLoadEvidence,
   PocPanelPluginCatalog,
 } from './panels/types';
+export {
+  extractTestDataDataSourceClass,
+  loadExactTestDataDataSourceClass,
+  TESTDATA_MODULE_IDENTITY,
+} from './datasources/testdata';
+export type { TestDataDataSourceConstructor } from './datasources/testdata';

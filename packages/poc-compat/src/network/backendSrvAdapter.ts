@@ -167,8 +167,9 @@ function appendParams(url: string, params: Record<string, unknown> | undefined):
 }
 
 function createHeaders(input: BackendSrvRequest['headers']): Headers {
-  const headers = new Headers(input as HeadersInit | undefined);
-  for (const name of headers.keys()) {
+  const headers = new Headers();
+  const entries = input instanceof Headers ? [...input.entries()] : Object.entries(input ?? {});
+  for (const [name, rawValue] of entries) {
     if (forbiddenCredentialHeader.test(name)) {
       throw new PocTransportError(
         'transport-credential-header-forbidden',
@@ -176,6 +177,12 @@ function createHeaders(input: BackendSrvRequest['headers']): Headers {
         'other-grafana'
       );
     }
+    // Match Grafana's parseHeaders boundary: Fetch only accepts ISO-8859-1
+    // header values, so context containing Unicode is URI encoded as a whole.
+    const safeName = /[^\u0000-\u00ff]/.test(name) ? encodeURI(name) : name;
+    const value = String(rawValue);
+    const safeValue = /[^\u0000-\u00ff]/.test(value) ? encodeURI(value) : value;
+    headers.set(safeName, safeValue);
   }
   return headers;
 }

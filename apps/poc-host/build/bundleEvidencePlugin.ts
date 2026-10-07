@@ -8,12 +8,18 @@ export interface BundleEvidencePluginOptions {
 }
 
 function evidenceModuleId(id: string, repositoryRoot: string): string {
+  const virtualSourcePrefix = 'poc-pinned-grafana-source:';
   const normalized = id.replace(/^\0+/, '').replaceAll('\\', '/');
   const normalizedRoot = repositoryRoot.replaceAll('\\', '/').replace(/\/$/, '');
   if (process.env.GRAFANA_SOURCE_DIR) {
     const sourceRoot = process.env.GRAFANA_SOURCE_DIR.replaceAll('\\', '/').replace(/\/$/, '');
     if (normalized.startsWith(`${sourceRoot}/`)) {
       return `<grafana-source>/${normalized.slice(sourceRoot.length + 1)}`;
+    }
+    if (normalized.startsWith(virtualSourcePrefix)) {
+      return `<grafana-source>/public/app/plugins/datasource/grafana-testdata-datasource/${normalized
+        .slice(virtualSourcePrefix.length)
+        .replace(/\.js$/, '')}`;
     }
   }
   if (normalized.startsWith(`${normalizedRoot}/`)) {

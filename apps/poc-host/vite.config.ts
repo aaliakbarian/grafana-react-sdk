@@ -7,16 +7,61 @@ import { defineConfig } from 'vite';
 
 import { bundleEvidencePlugin } from './build/bundleEvidencePlugin.ts';
 import { forbiddenGrafanaImportPlugin } from './build/forbiddenGrafanaImportPlugin.ts';
+import { pinnedGrafanaSourceTransformPlugin } from './build/pinnedGrafanaSourceTransformPlugin.ts';
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const grafanaSourceDir = process.env.GRAFANA_SOURCE_DIR
   ? resolve(process.env.GRAFANA_SOURCE_DIR)
   : undefined;
 const textExperimentEnabled = process.env.POC_TEXT_PANEL_EXPERIMENT === '1';
+const testDataExperimentEnabled = process.env.POC_TESTDATA_DATASOURCE_EXPERIMENT === '1';
 const expectedGrafanaCommit = '6193dc03311b631b9727b560d24369e683dc396e';
+const reviewedTestDataSourceFiles = [
+  'ConfigEditor.tsx',
+  'LogIpsum.ts',
+  'MetaDataInspector.tsx',
+  'QueryEditor.tsx',
+  'TestInfoTab.tsx',
+  'components/CSVContentEditor.tsx',
+  'components/CSVFileEditor.tsx',
+  'components/CSVWaveEditor.tsx',
+  'components/ErrorEditor.tsx',
+  'components/ErrorWithSourceEditor.tsx',
+  'components/ExemplarLabelsEditor.tsx',
+  'components/ExemplarsEditor.tsx',
+  'components/FlakyQueryEditor.tsx',
+  'components/GrafanaLiveEditor.tsx',
+  'components/NodeGraphEditor.tsx',
+  'components/PredictablePulseEditor.tsx',
+  'components/RandomWalkEditor.tsx',
+  'components/RawFrameEditor.tsx',
+  'components/SimulationQueryEditor.tsx',
+  'components/SimulationSchemaForm.tsx',
+  'components/StreamingClientEditor.tsx',
+  'components/USAQueryEditor.tsx',
+  'constants.ts',
+  'dataquery.ts',
+  'datasource.ts',
+  'metricTree.ts',
+  'module.tsx',
+  'nodeGraphUtils.ts',
+  'runStreams.ts',
+  'testData/flameGraphResponse.ts',
+  'testData/serviceMapResponse.ts',
+  'testData/serviceMapResponseMedium.ts',
+  'variables.ts',
+] as const;
 
 function verifyGrafanaSourceCheckout(sourceDir: string): void {
   statSync(resolve(sourceDir, 'public/app/plugins/panel/text/module.tsx'));
+  if (testDataExperimentEnabled) {
+    statSync(
+      resolve(
+        sourceDir,
+        'public/app/plugins/datasource/grafana-testdata-datasource/module.tsx'
+      )
+    );
+  }
   const commit = execFileSync('git', ['-C', sourceDir, 'rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
@@ -47,8 +92,21 @@ const reviewedSourceFiles = grafanaSourceDir
   ? [
       resolve(grafanaSourceDir, 'public/app/core/config'),
       resolve(grafanaSourceDir, 'public/app/core/config.ts'),
+      ...(testDataExperimentEnabled
+        ? reviewedTestDataSourceFiles.map((file) =>
+            resolve(
+              grafanaSourceDir,
+              'public/app/plugins/datasource/grafana-testdata-datasource',
+              file
+            )
+          )
+        : []),
     ]
   : [];
+const testDataSourceRoot =
+  grafanaSourceDir && testDataExperimentEnabled
+    ? resolve(grafanaSourceDir, 'public/app/plugins/datasource/grafana-testdata-datasource')
+    : undefined;
 
 export default defineConfig({
   // This is the Task 5 dynamic Grafana cohort plus Task 6's direct RxJS boundary.
@@ -58,12 +116,18 @@ export default defineConfig({
       '@grafana/data',
       '@grafana/i18n',
       '@grafana/runtime',
+      '@grafana/runtime/unstable',
       '@grafana/scenes',
       '@grafana/schema',
       '@grafana/ui',
       // Task 6's BackendSrv adapter imports Observable directly. Declaring it
       // prevents Vite from discovering RxJS mid-probe and reloading the page.
       'rxjs',
+      // Task 10 exact-source TestData direct imports. Declaring only these
+      // bare imports avoids a mid-probe optimizer reload.
+      'd3-random',
+      'lodash',
+      'react-use',
     ],
   },
   plugins: [
@@ -72,6 +136,15 @@ export default defineConfig({
       sourceBridgeFiles: reviewedSourceFiles,
       sourceBridgeRoots: reviewedSourceRoots,
     }),
+    ...(testDataSourceRoot
+      ? [
+          pinnedGrafanaSourceTransformPlugin({
+            entryAlias: 'grafana-poc-testdata-datasource',
+            entrypoint: 'module.tsx',
+            sourceRoot: testDataSourceRoot,
+          }),
+        ]
+      : []),
     react(),
     bundleEvidencePlugin({ repositoryRoot }),
   ],
@@ -110,6 +183,14 @@ export default defineConfig({
               'packages/poc-grafana-bridge/src/panels/catalog.ts'
             ),
             task8Text: resolve(repositoryRoot, 'packages/poc-grafana-bridge/src/panels/text.ts'),
+            ...(testDataExperimentEnabled
+              ? {
+                  task10TestData: resolve(
+                    repositoryRoot,
+                    'packages/poc-grafana-bridge/src/datasources/testdata.ts'
+                  ),
+                }
+              : {}),
           },
           preserveEntrySignatures: 'strict',
         },

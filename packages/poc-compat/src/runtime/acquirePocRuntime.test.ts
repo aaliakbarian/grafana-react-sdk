@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { PocHostConfig } from '../config/hostConfig';
 import type { GrafanaCohort } from '../config/loadGrafanaCohort';
 import type { PocMinimalBootData } from '../config/installBootData';
+import type { DataSourceInstanceSettings } from '@grafana/data';
+import type { TemplateSrv } from '@grafana/runtime';
+import type { PocDataSourceConstructor } from '../datasource/pocDataSourceSrv';
 import { createRuntimeEvidenceRecorder } from './runtimeIdentity';
 import {
   createPocRuntimeCoordinator,
@@ -74,7 +77,10 @@ function createFakeCohort(bootData: unknown) {
   const theme = { isLight: true };
   let appEvents: unknown;
   let backendSrv: unknown;
+  let dataSourceSrv: unknown;
   let pluginImportUtils: unknown;
+  let runRequest: unknown;
+  let templateSrv: unknown;
   const standardEditorsRegistry = { setInit: vi.fn() };
   class FakeEventBus {
     publish(event: { type?: string }) {
@@ -117,14 +123,26 @@ function createFakeCohort(bootData: unknown) {
     runtime: {
       config: { appSubUrl: '', bootData, namespace: 'default', theme2: theme },
       getBackendSrv: () => backendSrv,
+      getDataSourceSrv: () => dataSourceSrv,
       getPluginImportUtils: () => pluginImportUtils,
+      getRunRequest: () => runRequest,
+      getTemplateSrv: () => templateSrv,
       getAppEvents: () => appEvents,
       locationService,
       setBackendSrv: (value: unknown) => {
         backendSrv = value;
       },
+      setDataSourceSrv: (value: unknown) => {
+        dataSourceSrv = value;
+      },
       setPluginImportUtils: (value: unknown) => {
         pluginImportUtils = value;
+      },
+      setRunRequest: (value: unknown) => {
+        runRequest = value;
+      },
+      setTemplateSrv: (value: unknown) => {
+        templateSrv = value;
       },
       setAppEvents: (value: unknown) => {
         appEvents = value;
@@ -165,8 +183,14 @@ function runtimeHarness() {
   const browser = createEnvironment();
   let cohortLoads = 0;
   let fake: ReturnType<typeof createFakeCohort> | undefined;
+  const initializeLoggersRegistry = vi.fn();
+  const registerRuntimeDataSourceInstance = vi.fn();
   const environment: PocRuntimeCoordinatorEnvironment = {
     document: browser.document,
+    loadQueryRuntimeApis: async () => ({
+      initializeLoggersRegistry,
+      registerRuntimeDataSourceInstance,
+    }),
     loadCohort: async ({ bootDataInstallation }) => {
       if (!bootDataInstallation) throw new Error('Boot data must be installed before the cohort.');
       cohortLoads += 1;
@@ -185,10 +209,79 @@ function runtimeHarness() {
       if (!fake) throw new Error('Cohort was not loaded.');
       return fake;
     },
+    initializeLoggersRegistry,
+    registerRuntimeDataSourceInstance,
   };
 }
 
 describe('POC compatibility runtime coordinator', () => {
+  it('installs the Task 10 query responsibilities once and rejects another loader identity', async () => {
+    class FakeTestDataSource {
+      constructor(
+        readonly settings: DataSourceInstanceSettings,
+        readonly templateSrv: TemplateSrv
+      ) {}
+    }
+    const request = vi.fn<typeof fetch>(async () =>
+      new Response(
+        JSON.stringify({
+          datasources: {
+            Fixture: {
+              access: 'proxy',
+              id: 7,
+              isDefault: true,
+              jsonData: {},
+              meta: { id: 'grafana-testdata-datasource', metrics: true },
+              name: 'Grafana React SDK POC TestData',
+              readOnly: true,
+              type: 'grafana-testdata-datasource',
+              uid: 'grsdk-testdata',
+            },
+          },
+          defaultDatasource: 'Grafana React SDK POC TestData',
+        }),
+        { headers: { 'content-type': 'application/json' }, status: 200 }
+      )
+    );
+    const loadDataSourceClass = vi.fn(async () =>
+      FakeTestDataSource as unknown as PocDataSourceConstructor
+    );
+    const harness = runtimeHarness();
+    const lease = await harness.coordinator.acquire(hostConfig({ request }));
+    const options = {
+      loadDataSourceClass,
+      moduleIdentity: 'public/app/plugins/datasource/grafana-testdata-datasource/module.tsx',
+    };
+
+    const first = await lease.acquireQueryRuntime(options);
+    const second = await lease.acquireQueryRuntime(options);
+
+    expect(second).toBe(first);
+    expect(loadDataSourceClass).toHaveBeenCalledOnce();
+    expect(harness.initializeLoggersRegistry).toHaveBeenCalledOnce();
+    expect(harness.registerRuntimeDataSourceInstance).toHaveBeenCalledOnce();
+    expect(harness.registerRuntimeDataSourceInstance).toHaveBeenCalledWith({
+      dataSource: await first.dataSourceSrv.get('grsdk-testdata'),
+    });
+    expect(harness.fake.cohort.runtime.getDataSourceSrv()).toBe(first.dataSourceSrv);
+    expect(harness.fake.cohort.runtime.getTemplateSrv()).toBe(first.templateSrv);
+    expect(harness.fake.cohort.runtime.getRunRequest()).toBe(first.runRequest);
+    expect(harness.coordinator.inspect()).toMatchObject({
+      initializationSteps: expect.arrayContaining([
+        'frontend-settings-loaded',
+        'template-service-installed',
+        'datasource-service-installed',
+        'testdata-instance-loaded',
+        'testdata-runtime-instance-registered',
+        'run-request-installed',
+        'query-runtime-ready',
+      ]),
+      queryRuntimeStatus: 'ready',
+    });
+    await expect(
+      lease.acquireQueryRuntime({ ...options, loadDataSourceClass: async () => loadDataSourceClass() })
+    ).rejects.toBeInstanceOf(PocRuntimeConflictError);
+  });
   it('initializes each named responsibility in order and reuses one compatible identity', async () => {
     const harness = runtimeHarness();
     const evidence = createRuntimeEvidenceRecorder();

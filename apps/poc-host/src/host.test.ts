@@ -78,10 +78,14 @@ describe('standalone POC host contract', () => {
       '@grafana/data',
       '@grafana/i18n',
       '@grafana/runtime',
+      '@grafana/runtime/unstable',
       '@grafana/scenes',
       '@grafana/schema',
       '@grafana/ui',
       'rxjs',
+      'd3-random',
+      'lodash',
+      'react-use',
     ]);
 
     const proxy = module.default.server?.proxy?.['/grafana'];

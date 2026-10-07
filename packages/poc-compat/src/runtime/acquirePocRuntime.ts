@@ -18,6 +18,11 @@ import { initializePocI18n } from '../i18n/initializePocI18n';
 import { sanitizeEvidenceText } from '../instrumentation/networkRecorder';
 import { createResourceTracker } from '../instrumentation/resourceTracker';
 import { installLocationPolicy } from '../location/locationPolicy';
+import type { PocDataSourceConstructor } from '../datasource/pocDataSourceSrv';
+import {
+  createPocQueryEvidenceRecorder,
+  type PocQueryEvidenceRecorder,
+} from '../instrumentation/queryTrace';
 import {
   installGateATextOptionEditors,
   isTextRuntimePanelCatalog,
@@ -41,6 +46,11 @@ import {
   PocRuntimeConflictError,
   type PocRuntimeInstrumentationSink,
 } from './runtimeIdentity';
+import {
+  installPocQueryRuntime,
+  type PocQueryRuntime,
+  type PocQueryRuntimeInitializationStep,
+} from './installPocQueryRuntime';
 
 export { PocRuntimeConflictError } from './runtimeIdentity';
 
@@ -56,7 +66,15 @@ export type PocRuntimeInitializationStep =
   | 'backend-transport-installed'
   | 'app-events-installed'
   | 'location-policy-installed'
+  | PocQueryRuntimeInitializationStep
+  | 'query-runtime-ready'
   | 'runtime-ready';
+
+export interface PocQueryRuntimeOptions {
+  readonly evidence?: PocQueryEvidenceRecorder;
+  readonly loadDataSourceClass: () => Promise<PocDataSourceConstructor>;
+  readonly moduleIdentity: string;
+}
 
 export interface PocDashboardScope {
   readonly instanceId: string;
@@ -72,6 +90,7 @@ export interface PocRuntimeLease {
   readonly providerValues: PocGrafanaProviderValues;
   readonly scenes: PocScenesModule;
   readonly transportEvidence: PocTransportEvidenceRecorder;
+  acquireQueryRuntime(options: PocQueryRuntimeOptions): Promise<PocQueryRuntime>;
   acquireDashboardScope(instanceId: string): PocDashboardScope;
   release(): void;
 }
@@ -85,6 +104,7 @@ export interface PocRuntimeInspection {
   readonly moduleIdentities?: GrafanaCohort['moduleIdentities'];
   readonly observedEventTypes: readonly string[];
   readonly portal: { readonly activeReferences: number; readonly ownsRoot: boolean };
+  readonly queryRuntimeStatus: 'empty' | 'failed' | 'initializing' | 'ready';
   readonly status: 'empty' | 'failed' | 'initializing' | 'ready';
 }
 
@@ -99,6 +119,10 @@ export interface PocRuntimeCoordinator {
 export interface PocRuntimeCoordinatorEnvironment {
   readonly document: PocPortalDocument;
   readonly loadCohort?: (options: LoadGrafanaCohortOptions) => Promise<GrafanaCohort>;
+  readonly loadQueryRuntimeApis?: () => Promise<{
+    initializeLoggersRegistry(): void;
+    registerRuntimeDataSourceInstance: typeof import('@grafana/runtime/unstable')['registerRuntimeDataSourceInstance'];
+  }>;
   readonly window: PocBootWindow & PocAssetWindow;
 }
 
@@ -126,6 +150,10 @@ export function createPocRuntimeCoordinator(
   let failure: string | undefined;
   let activeLeases = 0;
   let nextLeaseId = 0;
+  let queryRuntimeStatus: PocRuntimeInspection['queryRuntimeStatus'] = 'empty';
+  let queryRuntimePromise: Promise<PocQueryRuntime> | undefined;
+  let queryRuntimeLoader: PocQueryRuntimeOptions['loadDataSourceClass'] | undefined;
+  let queryRuntimeModuleIdentity: string | undefined;
 
   const recordStep = (
     step: PocRuntimeInitializationStep,
@@ -258,6 +286,55 @@ export function createPocRuntimeCoordinator(
       providerValues: runtime.providerValues,
       scenes: runtime.cohort.scenes,
       transportEvidence: runtime.transportEvidence,
+      acquireQueryRuntime(options) {
+        if (!active) {
+          return Promise.reject(new Error('Cannot acquire query services from a released runtime lease.'));
+        }
+        if (
+          queryRuntimePromise &&
+          (queryRuntimeLoader !== options.loadDataSourceClass ||
+            queryRuntimeModuleIdentity !== options.moduleIdentity)
+        ) {
+          return Promise.reject(
+            new PocRuntimeConflictError(
+              `${fingerprint}:query-runtime`,
+              `${fingerprint}:conflicting-query-runtime`
+            )
+          );
+        }
+        if (!queryRuntimePromise) {
+          queryRuntimeLoader = options.loadDataSourceClass;
+          queryRuntimeModuleIdentity = options.moduleIdentity;
+          queryRuntimeStatus = 'initializing';
+          const evidence = options.evidence ?? createPocQueryEvidenceRecorder();
+          queryRuntimePromise = (async () => {
+            const queryRuntimeApis = await (
+              environment.loadQueryRuntimeApis?.() ?? import('@grafana/runtime/unstable')
+            );
+            return installPocQueryRuntime({
+              backendSrv: runtime.backendSrv,
+              evidence,
+              initializeLoggersRegistry: queryRuntimeApis.initializeLoggersRegistry,
+              loadDataSourceClass: options.loadDataSourceClass,
+              moduleIdentity: options.moduleIdentity,
+              onStep: (step) => recordStep(step, instrumentation),
+              registerRuntimeDataSourceInstance:
+                queryRuntimeApis.registerRuntimeDataSourceInstance,
+              runtime: runtime.cohort.runtime,
+            });
+          })()
+            .then((queryRuntime) => {
+              queryRuntimeStatus = 'ready';
+              recordStep('query-runtime-ready', instrumentation);
+              return queryRuntime;
+            })
+            .catch((error: unknown) => {
+              queryRuntimeStatus = 'failed';
+              throw error;
+            });
+        }
+        return queryRuntimePromise;
+      },
       acquireDashboardScope(instanceId) {
         if (!active) {
           throw new Error('Cannot acquire a dashboard scope from a released runtime lease.');
@@ -342,6 +419,7 @@ export function createPocRuntimeCoordinator(
         ...(readyRuntime ? { moduleIdentities: structuredClone(readyRuntime.cohort.moduleIdentities) } : {}),
         observedEventTypes: readyRuntime?.events.snapshotObservedTypes() ?? [],
         portal: portalManager.inspect(),
+        queryRuntimeStatus,
         status,
       };
     },
@@ -369,6 +447,7 @@ export function inspectPocRuntime(): PocRuntimeInspection {
       initializationSteps: [],
       observedEventTypes: [],
       portal: { activeReferences: 0, ownsRoot: false },
+      queryRuntimeStatus: 'empty',
       status: 'empty',
     }
   );

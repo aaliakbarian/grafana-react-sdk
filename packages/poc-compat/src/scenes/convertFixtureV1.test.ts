@@ -79,6 +79,25 @@ function fixtureResult(name = 'grsdk-phase0-poc'): PocDashboardV1Result {
 }
 
 describe('Task 7 fixture V1 to Scenes conversion', () => {
+  it('enriches the Task 7 Stat SceneQueryRunner request with dashboard and panel identity', () => {
+    const runtime = { scenes };
+    const root = convertFixtureV1ToScene({
+      catalog: { identity: 'task10-stat-query-only', panelIds: ['stat'] },
+      input: fixtureResult(),
+      runtime,
+    });
+    const gridItem = root.state.body.state.children[0];
+    const panel = (gridItem?.state as { body?: FakeSceneObject } | undefined)?.body;
+    const runner = panel?.state.$data;
+
+    expect(root.enrichDataRequest?.(runner)).toEqual({
+      dashboardTitle: 'Grafana React SDK Phase 0 POC',
+      dashboardUID: 'grsdk-phase0-poc',
+      panelId: 2,
+      panelName: 'Stat — predictable pulse',
+      panelPluginId: 'stat',
+    });
+  });
   it('constructs the complete deterministic graph without activation', () => {
     const evidence = createSceneConversionEvidenceRecorder();
     const root = convertFixtureV1ToScene({

@@ -23,7 +23,14 @@ export interface ForbiddenGrafanaImportOptions {
 }
 
 function normalizeModuleId(id: string): string {
-  return id.replace(/^\0+/, '').replaceAll('\\', '/').split('?')[0] ?? id;
+  const normalized = id.replace(/^\0+/, '').replaceAll('\\', '/').split('?')[0] ?? id;
+  const virtualPrefix = 'poc-pinned-grafana-source:';
+  if (process.env.GRAFANA_SOURCE_DIR && normalized.startsWith(virtualPrefix)) {
+    const sourceRoot = process.env.GRAFANA_SOURCE_DIR.replaceAll('\\', '/').replace(/\/$/, '');
+    const relativeSource = normalized.slice(virtualPrefix.length).replace(/\.js$/, '');
+    return `${sourceRoot}/public/app/plugins/datasource/grafana-testdata-datasource/${relativeSource}`;
+  }
+  return normalized;
 }
 
 function evidenceModuleId(id: string, repositoryRoot: string): string {
@@ -112,12 +119,12 @@ export function classifyForbiddenGrafanaImport(
   ): ForbiddenGrafanaImport => ({ category, id, ...(importer ? { importer } : {}), reason });
 
   if (
-    id === 'grafana-poc-text-panel' &&
+    (id === 'grafana-poc-text-panel' || id === 'grafana-poc-testdata-datasource') &&
     !isInsideAllowedSourceBoundary(importer, ['/packages/poc-grafana-bridge/'])
   ) {
     return violation(
       'grafana-application-source-outside-bridge',
-      'The audited Text source alias may only be imported from the POC Grafana source bridge.'
+      'Audited Grafana source aliases may only be imported from the POC Grafana source bridge.'
     );
   }
 

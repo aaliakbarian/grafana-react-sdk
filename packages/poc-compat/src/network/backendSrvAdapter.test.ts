@@ -84,6 +84,43 @@ describe('POC BackendSrv adapter', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('encodes non-Latin-1 query-context headers like Grafana BackendSrv', async () => {
+    const request = vi.fn<typeof fetch>(async () => jsonResponse({ results: {} }));
+    const backend = createPocBackendSrv({ grafanaBasePath: '/grafana', request });
+
+    await backend.post('/api/ds/query', {}, { headers: { 'X-Panel-Title': 'Stat — pulse' } });
+
+    const headers = new Headers(request.mock.calls[0]?.[1]?.headers);
+    expect(headers.get('x-panel-title')).toBe('Stat%20%E2%80%94%20pulse');
+  });
+
+  it.each([401, 403])(
+    'classifies datasource query HTTP %s without retaining its response body',
+    async (status) => {
+      const evidence = createTransportEvidenceRecorder();
+      const backend = createPocBackendSrv({
+        evidence,
+        grafanaBasePath: '/grafana',
+        request: async () => jsonResponse({ message: 'must-not-persist' }, status),
+      });
+
+      await expect(backend.post('/api/ds/query', { queries: [] })).rejects.toMatchObject({
+        code: 'transport-http',
+        endpoint: 'datasource-query',
+        status,
+      });
+      expect(evidence.snapshot()).toEqual([
+        expect.objectContaining({
+          endpoint: 'datasource-query',
+          method: 'POST',
+          outcome: 'http-error',
+          status,
+        }),
+      ]);
+      expect(JSON.stringify(evidence.snapshot())).not.toContain('must-not-persist');
+    }
+  );
+
   it('normalizes HTTP, malformed JSON, network, and cancellation failures', async () => {
     const responses: Array<Response | Error> = [
       jsonResponse({ message: 'denied' }, 403),

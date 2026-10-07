@@ -1,4 +1,4 @@
-import type { BackendSrv } from '@grafana/runtime';
+import type { BackendSrv, DataSourceSrv, TemplateSrv } from '@grafana/runtime';
 import type { Context } from 'react';
 
 import {
@@ -10,6 +10,7 @@ import type {
   PocPluginImportUtils,
   PocStandardEditorsRegistry,
 } from '../panels/panelCatalog';
+import type { PocRunRequest } from '../query/runRequest';
 
 export const POC_PACKAGE_VERSIONS = {
   '@grafana/data': '13.2.3',
@@ -45,11 +46,17 @@ interface RuntimeModule {
     readonly theme2: PocTheme;
   };
   getBackendSrv(): BackendSrv;
+  getDataSourceSrv(): DataSourceSrv;
   getPluginImportUtils(): PocPluginImportUtils;
+  getRunRequest(): PocRunRequest;
+  getTemplateSrv(): TemplateSrv;
   getAppEvents(): unknown;
   readonly locationService: Record<string, unknown>;
   setBackendSrv(instance: BackendSrv): void;
+  setDataSourceSrv(instance: DataSourceSrv): void;
   setPluginImportUtils(utils: PocPluginImportUtils): void;
+  setRunRequest(runRequest: PocRunRequest): void;
+  setTemplateSrv(service: TemplateSrv): void;
   setAppEvents(instance: PocEventBus): void;
 }
 

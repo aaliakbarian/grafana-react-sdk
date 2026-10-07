@@ -1,5 +1,15 @@
 export { acquirePocRuntime, inspectPocRuntime } from './runtime/acquirePocRuntime';
-export type { PocRuntimeInspection, PocRuntimeLease } from './runtime/acquirePocRuntime';
+export type {
+  PocQueryRuntimeOptions,
+  PocRuntimeInspection,
+  PocRuntimeLease,
+} from './runtime/acquirePocRuntime';
+export type { PocQueryRuntime } from './runtime/installPocQueryRuntime';
+export {
+  createPocQueryEvidenceRecorder,
+  type PocQueryEvidenceEvent,
+  type PocQueryEvidenceRecorder,
+} from './instrumentation/queryTrace';
 export { GrafanaDashboard } from './component/GrafanaDashboard';
 export { PocGrafanaProviders } from './theme/PocGrafanaProviders';
 export {
