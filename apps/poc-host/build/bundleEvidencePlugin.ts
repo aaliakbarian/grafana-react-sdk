@@ -17,9 +17,15 @@ function evidenceModuleId(id: string, repositoryRoot: string): string {
       return `<grafana-source>/${normalized.slice(sourceRoot.length + 1)}`;
     }
     if (normalized.startsWith(virtualSourcePrefix)) {
-      return `<grafana-source>/public/app/plugins/datasource/grafana-testdata-datasource/${normalized
-        .slice(virtualSourcePrefix.length)
-        .replace(/\.js$/, '')}`;
+      const virtualSource = normalized.slice(virtualSourcePrefix.length);
+      const separator = virtualSource.indexOf(':');
+      const namespace = separator >= 0 ? virtualSource.slice(0, separator) : 'testdata';
+      const relativeSource = (separator >= 0 ? virtualSource.slice(separator + 1) : virtualSource).replace(/\.js$/, '');
+      const auditedRoot =
+        namespace === 'stat'
+          ? 'public/app/plugins/panel/stat'
+          : 'public/app/plugins/datasource/grafana-testdata-datasource';
+      return `<grafana-source>/${auditedRoot}/${relativeSource}`;
     }
   }
   if (normalized.startsWith(`${normalizedRoot}/`)) {

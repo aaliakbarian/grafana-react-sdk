@@ -5,6 +5,7 @@ export type {
   PocRuntimeLease,
 } from './runtime/acquirePocRuntime';
 export type { PocQueryRuntime } from './runtime/installPocQueryRuntime';
+export type { PocTransportEvidenceEvent } from './network/backendSrvAdapter';
 export {
   createPocQueryEvidenceRecorder,
   type PocQueryEvidenceEvent,
@@ -14,6 +15,7 @@ export { GrafanaDashboard } from './component/GrafanaDashboard';
 export { PocGrafanaProviders } from './theme/PocGrafanaProviders';
 export {
   POC_GATE_A_TEXT_PANEL_CATALOG,
+  POC_GATE_B_TEXT_STAT_PANEL_CATALOG,
   type PocPluginImportUtils,
 } from './panels/panelCatalog';
 export {

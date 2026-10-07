@@ -526,3 +526,149 @@ The source-built TestData distribution, large editor closure, unstable Runtime
 registrations, and version coupling remain unresolved production risks. POC
 success does not authorize distributing this bridge or adopting it as the
 production SDK architecture.
+
+## Gate B — Native query-backed Stat rendering
+
+**Result: PASS (D1).** The controlled dashboard's real Grafana OSS 13.2.3 Stat
+panel renders in the standalone React 19.2.8 host from real TestData
+`predictable_pulse` data. The path uses neither fabricated `PanelData` nor a
+Grafana application shell:
+
+```text
+<GrafanaDashboard uid="grsdk-phase0-poc" />
+  -> Task 5 compatibility runtime
+  -> stable V1 dashboard DTO and schema-42 preflight
+  -> Task 7 constrained Text + Stat Scenes graph
+  -> exact D1 TestData datasource runtime
+  -> SceneQueryRunner
+  -> POST /grafana/api/ds/query
+  -> PanelData Loading / Done
+  -> exact Grafana Stat PanelPlugin
+  -> PanelChrome / BigValue / native DOM and canvas
+```
+
+The closed panel catalogue now admits exactly `text` and `stat`. Both modules
+are preloaded through that audited catalogue after their option/field
+registries exist and before Scenes first renders. Scenes then obtains each
+plugin synchronously from Runtime's approved cache. This prevents React 19 from
+seeing the upstream PanelChrome loading-plugin transition from normal padding
+to Stat's `setNoPadding()` state, which otherwise emits a shorthand/longhand
+style warning. A failed preload is not promoted to runtime failure: Scenes can
+retry it and localize the error to the affected panel.
+
+### Rendering and display-processing evidence
+
+The primary Chromium path retrieves the real DTO, preserves panel ID 2's
+`lastNotNull` reduction, percent unit, absolute green/orange/red thresholds,
+background color mode, field configuration, target, datasource UID, time
+range, and options, and renders the deterministic `10%` or `90%` pulse value.
+The Stat background has the real Grafana gradient selected through threshold
+display processing. The host sentinel retains its committed color and font.
+
+Gate B installs only these view-time field descriptors from the already-loaded
+`@grafana/data` cohort: `unit`, `color`, `mappings`, and `thresholds`. It also
+installs only the option-editor IDs needed while the real plugin computes saved
+defaults: `radio`, `select`, `boolean`, `number`, and `stats-picker`. The POC
+does not render an editor or initialize Grafana edit chrome.
+
+Rendering uses the published Grafana light theme, ThemeContext, PanelChrome,
+BigValue/Stat components, and Emotion style nodes. It does not import the full
+Grafana application stylesheet. No new Stat-specific font, icon, or static
+asset request was required in the successful view path; inherited
+Monaco/Codicon assets remain attributable to Task 10's statically registered
+TestData editors rather than the Stat view itself.
+
+### Query, refresh, cancellation, and failure isolation
+
+The normal acceptance path records real `Loading` and `Done` transitions and
+successful `/grafana/api/ds/query` responses before the Stat value appears.
+Manual refresh adds exactly one new HTTP query and a new SceneQueryRunner
+request ID, then returns to `Done` without retaining the preceding
+subscription.
+
+React Strict Mode causes two initial query requests during development effect
+rehearsal. Both use the real datasource and complete cleanly; the explicit
+refresh still adds exactly one request. The duplicate initial request is an
+unresolved React 19/Scenes lifecycle efficiency risk, not hidden or disabled
+for this POC.
+
+A real TestData `slow_query` proves both cancellation paths. Switching from
+`grsdk-phase0-poc` to `grsdk-phase0-poc-alt` aborts the HTTP request,
+deactivates the old scene, renders the alternate Text sentinel, and prevents a
+cancelled request ID from later publishing `Done`. Switching back and
+unmounting while another slow query is in flight produces another cancelled
+query and releases the request, subscription, scene, portal, and observer
+ownership.
+
+A real `server_error_500` with TestData's explicit `server_panic` mode reaches
+the Grafana backend through `/grafana/api/ds/query`, returns HTTP 500, records
+transport `http-error` plus PanelData `Error`, and remains a panel-local
+failure. The Text panel, dashboard root, host sentinel, and UID controls remain
+responsive. Focused tests separately classify datasource UID and type failures,
+datasource module load failure, Stat module load failure, query 401/403 and
+server errors, malformed datasource packets, cancellation, and late-publication
+suppression. Only deterministic error branches use mocks.
+
+Mount, unmount, remount, refresh, UID change, and error scenarios complete with
+zero iframe, Grafana navigation/chrome, route takeover, page error, unexpected
+console error, or retained instance-owned resource. The actual browser cohort
+continues to report one physical React 19.2.8 and ReactDOM 19.2.8 identity. The
+Scenes 8.13.5 React `^18` peer warning remains visible and unsuppressed.
+
+### Stat source boundary and licensing checkpoint
+
+Gate B uses P1 exact-source loading at source commit
+`6193dc03311b631b9727b560d24369e683dc396e`. The eight newly admitted Grafana
+application files are:
+
+- `public/app/features/panel/suggestions/utils.ts`;
+- `public/app/plugins/panel/stat/StatMigrations.ts`;
+- `public/app/plugins/panel/stat/StatPanel.tsx`;
+- `public/app/plugins/panel/stat/common.ts`;
+- `public/app/plugins/panel/stat/module.tsx`;
+- `public/app/plugins/panel/stat/panelcfg.gen.ts`;
+- `public/app/plugins/panel/stat/presets.ts`;
+- `public/app/plugins/panel/stat/suggestions.ts`.
+
+The source entrypoint is available only through the bridge alias
+`grafana-poc-stat-panel`; direct application-source access remains forbidden
+from `poc-host` and `poc-compat`. Source virtual namespaces keep the TestData
+and Stat transform graphs isolated even when relative paths overlap.
+
+`StatPanel.tsx` imports `findNumericFieldMinMax` from the unpublished
+`@grafana/data/internal` subpath, which the 13.2.3 package export map does not
+publish. The bridge build resolves only that exact specifier to the exact
+13.2.3 compiled package module `dist/esm/field/fieldOverrides.mjs`. This is an
+explicit POC-only compatibility adapter and version-coupling/licensing review
+checkpoint; it is not evidence of a stable public API. No broad deep-import
+alias is admitted.
+
+`StatPanel.tsx` also names `DataLinksContextMenuApi` from the unpublished
+`@grafana/ui/internal` subpath in a type-only import. The build erases that
+import, so it adds no runtime module to the Stat bundle, but it remains an
+explicit source-coupling checkpoint for any future adaptation of this file.
+
+The final inspector evaluated 9,123 imports and 3,801 bundled modules across
+147 chunks. It classified exactly 47 reviewed Grafana application files: the
+39 inherited Text/TestData files plus these eight Stat files. It found zero
+unresolved Grafana internal-package modules, zero SystemJS modules, and no
+unauthorized application source. The source-built Stat chunk is approximately
+12.89 kB raw / 3.61 kB gzip. These numbers are research evidence, not a
+production bundle acceptance decision.
+
+Checkpoints L1-L4 remain open. This section records exact source and asset
+provenance but makes no legal conclusion and does not authorize production
+distribution. Ignored detailed evidence is generated at:
+
+- `artifacts/playwright/gate-b-stat.json`;
+- `artifacts/playwright/gate-b-stat-failure.json`;
+- `apps/poc-host/dist/evidence/bundle-evidence.json`;
+- `apps/poc-host/dist/evidence/forbidden-import-report.json`.
+
+**Gate C may proceed after Gate B review.** Gate B proves the real
+query-backed Stat dependency chain, refresh, cancellation, display processing,
+failure isolation, and clean native lifecycle without an iframe, application
+shell, SDK backend, or second React runtime. The duplicate Strict Mode initial
+query, unpublished Stat/Data adapter, application-source licensing boundary,
+large inherited TestData editor closure, and React peer-version mismatch remain
+explicit risks for the Gate C decision.

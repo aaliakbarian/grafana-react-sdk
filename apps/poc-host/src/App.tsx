@@ -1,8 +1,10 @@
 import {
   GrafanaDashboard,
   POC_GATE_A_TEXT_PANEL_CATALOG,
+  POC_GATE_B_TEXT_STAT_PANEL_CATALOG,
   PocGrafanaProviders,
   acquirePocRuntime,
+  createPocQueryEvidenceRecorder,
   inspectPocRuntime,
   type PocDashboardSceneRoot,
   type PocRuntimeInspection,
@@ -12,7 +14,11 @@ import {
 } from '@grafana-react-sdk/poc-compat';
 import {
   createTextPanelCatalog,
+  createTextAndStatPanelCatalog,
+  loadExactStatPanelPlugin,
   loadExactTextPanelPlugin,
+  loadExactTestDataDataSourceClass,
+  TESTDATA_MODULE_IDENTITY,
   type PanelPluginLoadEvent,
 } from '@grafana-react-sdk/poc-grafana-bridge';
 import { useCallback, useEffect, useState } from 'react';
@@ -30,6 +36,12 @@ const textPluginCatalog = createTextPanelCatalog({
   evidence: { record: (event) => pluginEvents.push(structuredClone(event)) },
   loadTextPlugin: loadExactTextPanelPlugin,
 });
+const gateBPluginCatalog = createTextAndStatPanelCatalog({
+  evidence: { record: (event) => pluginEvents.push(structuredClone(event)) },
+  loadStatPlugin: loadExactStatPanelPlugin,
+  loadTextPlugin: loadExactTextPanelPlugin,
+});
+const queryEvidence = createPocQueryEvidenceRecorder();
 const gateAConfig = {
   assetBasePath: '/grafana/public/',
   grafanaBasePath: '/grafana',
@@ -43,6 +55,13 @@ const gateAConfig = {
   theme: 'light',
   timezone: 'browser',
 } as const;
+const gateBConfig = {
+  ...gateAConfig,
+  panelCatalog: {
+    ...POC_GATE_B_TEXT_STAT_PANEL_CATALOG,
+    pluginImportUtils: gateBPluginCatalog,
+  },
+} as const;
 
 export interface GateAHostInspection {
   readonly conversionEvents: readonly PocSceneConversionEvidenceEvent[];
@@ -51,6 +70,22 @@ export interface GateAHostInspection {
   readonly runtime: PocRuntimeInspection;
   readonly scenes: ReadonlyArray<{ readonly active: boolean; readonly uid: string }>;
   readonly theme?: { readonly isLight: boolean };
+}
+
+export interface GateBHostInspection {
+  readonly conversionEvents: readonly PocSceneConversionEvidenceEvent[];
+  readonly pluginEvents: readonly PanelPluginLoadEvent[];
+  readonly queryEvents: ReturnType<typeof queryEvidence.snapshot>;
+  readonly runtime: PocRuntimeInspection;
+  readonly scenes: ReadonlyArray<{ readonly active: boolean; readonly uid: string }>;
+  readonly statScene?: {
+    readonly colorMode?: unknown;
+    readonly reduction?: unknown;
+    readonly thresholds?: unknown;
+    readonly unit?: unknown;
+  };
+  readonly statPlugin?: { readonly id: string; readonly module: string; readonly version: string };
+  readonly transport: ReturnType<PocRuntimeLease['transportEvidence']['snapshot']>;
 }
 
 export function inspectGateAHost(): GateAHostInspection {
@@ -75,8 +110,94 @@ export function inspectGateAHost(): GateAHostInspection {
   };
 }
 
+export function inspectGateBHost(): GateBHostInspection {
+  const stat = gateBPluginCatalog.getPanelPluginFromCache('stat');
+  const activeScene = [...observedScenes].reverse().find((scene) => scene.isActive);
+  const statScene = inspectStatScene(activeScene);
+  return {
+    conversionEvents: structuredClone(conversionEvents),
+    pluginEvents: structuredClone(pluginEvents),
+    queryEvents: queryEvidence.snapshot(),
+    runtime: inspectPocRuntime(),
+    scenes: observedScenes.map((scene) => ({ active: scene.isActive, uid: scene.state.uid })),
+    ...(statScene ? { statScene } : {}),
+    ...(stat
+      ? {
+          statPlugin: {
+            id: stat.meta.id,
+            module: stat.meta.module,
+            version: stat.meta.info.version,
+          },
+        }
+      : {}),
+    transport: activeRuntimeLease?.transportEvidence.snapshot() ?? [],
+  };
+}
+
+interface GateBQueryRunnerHandle {
+  readonly state?: { readonly queries?: ReadonlyArray<Record<string, unknown>> };
+  runQueries?: () => void;
+  setState?: (state: { readonly queries: ReadonlyArray<Record<string, unknown>> }) => void;
+}
+
+function getStatQueryRunner(scene: PocDashboardSceneRoot | undefined): GateBQueryRunnerHandle | undefined {
+  if (!scene) return;
+  const index = scene.state.legacyPanelIds.indexOf(2);
+  const child = scene.state.body.state.children[index] as
+    | { state?: { body?: { state?: { $data?: GateBQueryRunnerHandle } } } }
+    | undefined;
+  return child?.state?.body?.state?.$data;
+}
+
+function inspectStatScene(scene: PocDashboardSceneRoot | undefined) {
+  if (!scene) return;
+  const index = scene.state.legacyPanelIds.indexOf(2);
+  const panel = (scene.state.body.state.children[index] as
+    | {
+        state?: {
+          body?: {
+            state?: {
+              fieldConfig?: {
+                defaults?: { thresholds?: unknown; unit?: unknown };
+              };
+              options?: { colorMode?: unknown; reduceOptions?: unknown };
+            };
+          };
+        };
+      }
+    | undefined)?.state?.body?.state;
+  if (!panel) return;
+  return {
+    colorMode: panel.options?.colorMode,
+    reduction: panel.options?.reduceOptions,
+    thresholds: panel.fieldConfig?.defaults?.thresholds,
+    unit: panel.fieldConfig?.defaults?.unit,
+  };
+}
+
+function refreshStat(scene: PocDashboardSceneRoot | undefined) {
+  getStatQueryRunner(scene)?.runQueries?.();
+}
+
+function configureGateBQueryDiagnostic(scene: PocDashboardSceneRoot, mode: string | null) {
+  if (mode !== 'server-error' && mode !== 'slow') return;
+  const runner = getStatQueryRunner(scene);
+  const queries = runner?.state?.queries;
+  if (!runner?.setState || !queries) return;
+  runner.setState({
+    queries: queries.map((query) => ({
+      ...query,
+      scenarioId: mode === 'slow' ? 'slow_query' : 'server_error_500',
+      ...(mode === 'slow' ? { stringInput: '5s' } : { errorType: 'server_panic' }),
+    })),
+  });
+}
+
 export function App() {
-  const gateAEnabled = new URLSearchParams(window.location.search).get('gate') === 'a';
+  const gate = new URLSearchParams(window.location.search).get('gate');
+  const gateAEnabled = gate === 'a';
+  const gateBEnabled = gate === 'b';
+  const gateBQueryDiagnostic = new URLSearchParams(window.location.search).get('gateBQuery');
   const [runtime, setRuntime] = useState<PocRuntimeLease>();
   const [runtimeError, setRuntimeError] = useState<string>();
   const [uid, setUid] = useState<'grsdk-phase0-poc' | 'grsdk-phase0-poc-alt'>(
@@ -84,23 +205,44 @@ export function App() {
   );
 
   useEffect(() => {
-    if (!gateAEnabled) {
+    if (!gateAEnabled && !gateBEnabled) {
       return;
     }
 
     let disposed = false;
     let lease: PocRuntimeLease | undefined;
-    void acquirePocRuntime(gateAConfig)
-      .then((acquired) => {
+    const releaseLease = () => {
+      lease?.release();
+      if (activeRuntimeLease === lease) activeRuntimeLease = undefined;
+      lease = undefined;
+    };
+    void acquirePocRuntime(gateBEnabled ? gateBConfig : gateAConfig)
+      .then(async (acquired) => {
         lease = acquired;
+        if (gateBEnabled) {
+          await acquired.acquireQueryRuntime({
+            evidence: queryEvidence,
+            loadDataSourceClass: loadExactTestDataDataSourceClass,
+            moduleIdentity: TESTDATA_MODULE_IDENTITY,
+          });
+          // Populate the closed runtime cache before Scenes first renders.
+          // Stat declares `setNoPadding()`: allowing the loading plugin to render
+          // first makes React 19 observe PanelChrome changing from padded to
+          // unpadded shorthand/longhand styles and emit an upstream warning.
+          await Promise.allSettled([
+            gateBPluginCatalog.importPanelPlugin('text'),
+            gateBPluginCatalog.importPanelPlugin('stat'),
+          ]);
+        }
         if (disposed) {
-          acquired.release();
+          releaseLease();
           return;
         }
         activeRuntimeLease = acquired;
         setRuntime(acquired);
       })
       .catch((error: unknown) => {
+        releaseLease();
         if (!disposed) {
           setRuntimeError(error instanceof Error ? error.message : 'Runtime initialization failed.');
         }
@@ -108,14 +250,17 @@ export function App() {
 
     return () => {
       disposed = true;
-      lease?.release();
-      if (activeRuntimeLease === lease) activeRuntimeLease = undefined;
+      releaseLease();
     };
-  }, [gateAEnabled]);
+  }, [gateAEnabled, gateBEnabled]);
 
-  const recordScene = useCallback((scene: PocDashboardSceneRoot) => {
-    observedScenes.push(scene);
-  }, []);
+  const recordScene = useCallback(
+    (scene: PocDashboardSceneRoot) => {
+      if (gateBEnabled) configureGateBQueryDiagnostic(scene, gateBQueryDiagnostic);
+      observedScenes.push(scene);
+    },
+    [gateBEnabled, gateBQueryDiagnostic]
+  );
 
   return (
     <main className="poc-host" data-testid="poc-host-shell">
@@ -137,11 +282,11 @@ export function App() {
           data-testid="grafana-dashboard-root"
           aria-label="Grafana dashboard rendering boundary"
         >
-          {gateAEnabled ? (
+          {gateAEnabled || gateBEnabled ? (
             <>
               <div className="poc-host__gate-controls">
                 <button
-                  data-testid="gate-a-switch-uid"
+                  data-testid={gateBEnabled ? 'gate-b-switch-uid' : 'gate-a-switch-uid'}
                   type="button"
                   onClick={() =>
                     setUid((current) =>
@@ -153,13 +298,28 @@ export function App() {
                 >
                   Switch fixture UID
                 </button>
+                {gateBEnabled ? (
+                  <button
+                    data-testid="gate-b-refresh"
+                    type="button"
+                    onClick={() =>
+                      refreshStat([...observedScenes].reverse().find((scene) => scene.isActive))
+                    }
+                  >
+                    Refresh Stat
+                  </button>
+                ) : null}
               </div>
               {runtimeError ? (
                 <div data-poc-gate-a-error="runtime">{runtimeError}</div>
               ) : runtime ? (
                 <PocGrafanaProviders values={runtime.providerValues}>
                   <GrafanaDashboard
-                    catalog={POC_GATE_A_TEXT_PANEL_CATALOG}
+                    catalog={
+                      gateBEnabled
+                        ? POC_GATE_B_TEXT_STAT_PANEL_CATALOG
+                        : POC_GATE_A_TEXT_PANEL_CATALOG
+                    }
                     conversionEvidence={conversionEvidence}
                     onSceneReady={recordScene}
                     runtime={runtime}

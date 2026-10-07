@@ -51,6 +51,15 @@ const reviewedTestDataSourceFiles = [
   'testData/serviceMapResponseMedium.ts',
   'variables.ts',
 ] as const;
+const reviewedStatSourceFiles = [
+  'StatMigrations.ts',
+  'StatPanel.tsx',
+  'common.ts',
+  'module.tsx',
+  'panelcfg.gen.ts',
+  'presets.ts',
+  'suggestions.ts',
+] as const;
 
 function verifyGrafanaSourceCheckout(sourceDir: string): void {
   statSync(resolve(sourceDir, 'public/app/plugins/panel/text/module.tsx'));
@@ -62,6 +71,7 @@ function verifyGrafanaSourceCheckout(sourceDir: string): void {
       )
     );
   }
+  statSync(resolve(sourceDir, 'public/app/plugins/panel/stat/module.tsx'));
   const commit = execFileSync('git', ['-C', sourceDir, 'rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
@@ -92,6 +102,11 @@ const reviewedSourceFiles = grafanaSourceDir
   ? [
       resolve(grafanaSourceDir, 'public/app/core/config'),
       resolve(grafanaSourceDir, 'public/app/core/config.ts'),
+      resolve(grafanaSourceDir, 'public/app/features/panel/suggestions/utils'),
+      resolve(grafanaSourceDir, 'public/app/features/panel/suggestions/utils.ts'),
+      ...reviewedStatSourceFiles.map((file) =>
+        resolve(grafanaSourceDir, 'public/app/plugins/panel/stat', file)
+      ),
       ...(testDataExperimentEnabled
         ? reviewedTestDataSourceFiles.map((file) =>
             resolve(
@@ -107,6 +122,9 @@ const testDataSourceRoot =
   grafanaSourceDir && testDataExperimentEnabled
     ? resolve(grafanaSourceDir, 'public/app/plugins/datasource/grafana-testdata-datasource')
     : undefined;
+const statSourceRoot = grafanaSourceDir
+  ? resolve(grafanaSourceDir, 'public/app/plugins/panel/stat')
+  : undefined;
 
 export default defineConfig({
   // This is the Task 5 dynamic Grafana cohort plus Task 6's direct RxJS boundary.
@@ -142,6 +160,17 @@ export default defineConfig({
             entryAlias: 'grafana-poc-testdata-datasource',
             entrypoint: 'module.tsx',
             sourceRoot: testDataSourceRoot,
+            virtualNamespace: 'testdata',
+          }),
+        ]
+      : []),
+    ...(statSourceRoot
+      ? [
+          pinnedGrafanaSourceTransformPlugin({
+            entryAlias: 'grafana-poc-stat-panel',
+            entrypoint: 'module.tsx',
+            sourceRoot: statSourceRoot,
+            virtualNamespace: 'stat',
           }),
         ]
       : []),
@@ -150,13 +179,23 @@ export default defineConfig({
   ],
   resolve: {
     alias: grafanaSourceDir
-      ? {
-          app: resolve(grafanaSourceDir, 'public/app'),
-          'grafana-poc-text-panel': resolve(
-            grafanaSourceDir,
-            'public/app/plugins/panel/text/v1/module.tsx'
-          ),
-        }
+      ? [
+          {
+            find: /^@grafana\/data\/internal$/,
+            replacement: resolve(
+              repositoryRoot,
+              'node_modules/@grafana/data/dist/esm/field/fieldOverrides.mjs'
+            ),
+          },
+          { find: 'app', replacement: resolve(grafanaSourceDir, 'public/app') },
+          {
+            find: 'grafana-poc-text-panel',
+            replacement: resolve(
+              grafanaSourceDir,
+              'public/app/plugins/panel/text/v1/module.tsx'
+            ),
+          },
+        ]
       : undefined,
     dedupe: [
       'react',
@@ -183,6 +222,7 @@ export default defineConfig({
               'packages/poc-grafana-bridge/src/panels/catalog.ts'
             ),
             task8Text: resolve(repositoryRoot, 'packages/poc-grafana-bridge/src/panels/text.ts'),
+            task11Stat: resolve(repositoryRoot, 'packages/poc-grafana-bridge/src/panels/stat.ts'),
             ...(testDataExperimentEnabled
               ? {
                   task10TestData: resolve(

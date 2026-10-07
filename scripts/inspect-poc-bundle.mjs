@@ -15,6 +15,17 @@ const task8TextSources = [
   '<grafana-source>/public/app/plugins/panel/text/v1/textPanelMigrationHandler.ts',
 ];
 
+const gateBStatSources = [
+  '<grafana-source>/public/app/features/panel/suggestions/utils.ts',
+  '<grafana-source>/public/app/plugins/panel/stat/StatMigrations.ts',
+  '<grafana-source>/public/app/plugins/panel/stat/StatPanel.tsx',
+  '<grafana-source>/public/app/plugins/panel/stat/common.ts',
+  '<grafana-source>/public/app/plugins/panel/stat/module.tsx',
+  '<grafana-source>/public/app/plugins/panel/stat/panelcfg.gen.ts',
+  '<grafana-source>/public/app/plugins/panel/stat/presets.ts',
+  '<grafana-source>/public/app/plugins/panel/stat/suggestions.ts',
+];
+
 // This list is deliberately exhaustive. A new application-source module must
 // fail inspection until its source and licensing provenance have been reviewed.
 const task10TestDataSources = [
@@ -60,6 +71,7 @@ if (boundary.violations.length > 0) {
 
 const allowedApplicationSources = new Set([
   ...(process.env.POC_TEXT_PANEL_EXPERIMENT === '1' ? task8TextSources : []),
+  ...(process.env.POC_TEXT_PANEL_EXPERIMENT === '1' ? gateBStatSources : []),
   ...(process.env.POC_TESTDATA_DATASOURCE_EXPERIMENT === '1'
     ? task10TestDataSources
     : []),

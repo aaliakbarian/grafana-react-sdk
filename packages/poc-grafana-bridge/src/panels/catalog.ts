@@ -3,6 +3,7 @@ import type { PanelPlugin, PanelPluginMeta, PluginMetaInfo } from '@grafana/data
 import {
   GRAFANA_SOURCE_COMMIT,
   GRAFANA_SOURCE_VERSION,
+  STAT_PANEL_ENTRYPOINT,
   TEXT_PANEL_V1_ENTRYPOINT,
 } from '../sourceIdentity';
 import type {
@@ -14,6 +15,8 @@ import type {
 
 export const TEXT_PLUGIN_ID = 'text' as const;
 export const TEXT_MODULE_IDENTITY = TEXT_PANEL_V1_ENTRYPOINT;
+export const STAT_PLUGIN_ID = 'stat' as const;
+export const STAT_MODULE_IDENTITY = STAT_PANEL_ENTRYPOINT;
 
 export class UnsupportedPanelPluginError extends Error {
   readonly code = 'panel-plugin-unsupported';
@@ -37,25 +40,28 @@ export class PanelPluginLoadError extends Error {
   }
 }
 
-function attachTextMetadata(plugin: PanelPlugin): PanelPlugin {
+function attachMetadata(
+  plugin: PanelPlugin,
+  identity: { readonly id: 'stat' | 'text'; readonly module: string; readonly name: string }
+): PanelPlugin {
   plugin.meta = {
     ...plugin.meta,
-    id: TEXT_PLUGIN_ID,
+    id: identity.id,
     info: {
       author: { name: 'Grafana Labs' },
-      description: 'Built-in Grafana Text panel.',
+      description: `Built-in Grafana ${identity.name} panel.`,
       links: [],
       logos: { large: '', small: '' },
       screenshots: [],
       updated: '',
       version: GRAFANA_SOURCE_VERSION,
     } as PluginMetaInfo,
-    name: 'Text',
+    name: identity.name,
     type: 'panel',
     version: GRAFANA_SOURCE_VERSION,
-    module: TEXT_MODULE_IDENTITY,
+    module: identity.module,
     baseUrl: '',
-    skipDataQuery: true,
+    skipDataQuery: identity.id === TEXT_PLUGIN_ID,
     suggestions: true,
   } as PanelPluginMeta;
   return plugin;
@@ -98,7 +104,11 @@ export function createTextPanelCatalog({
       });
       textPromise = loadTextPlugin()
         .then((plugin) => {
-          textPlugin = attachTextMetadata(plugin);
+          textPlugin = attachMetadata(plugin, {
+            id: TEXT_PLUGIN_ID,
+            module: TEXT_MODULE_IDENTITY,
+            name: 'Text',
+          });
           evidence?.record({
             moduleIdentity: TEXT_MODULE_IDENTITY,
             pluginId: TEXT_PLUGIN_ID,
@@ -117,6 +127,76 @@ export function createTextPanelCatalog({
           throw new PanelPluginLoadError(TEXT_PLUGIN_ID, { cause });
         });
       return textPromise;
+    },
+  };
+}
+
+export interface CreateTextAndStatPanelCatalogOptions extends CreateTextPanelCatalogOptions {
+  readonly loadStatPlugin: PocPanelPluginLoader;
+}
+
+export function createTextAndStatPanelCatalog({
+  evidence,
+  loadStatPlugin,
+  loadTextPlugin,
+}: CreateTextAndStatPanelCatalogOptions): PocPanelPluginCatalog {
+  const textCatalog = createTextPanelCatalog({ evidence, loadTextPlugin });
+  let statPromise: Promise<PanelPlugin> | undefined;
+  let statPlugin: PanelPlugin | undefined;
+
+  return {
+    getPanelPluginFromCache(id) {
+      return id === STAT_PLUGIN_ID
+        ? statPlugin
+        : id === TEXT_PLUGIN_ID
+          ? textCatalog.getPanelPluginFromCache(id)
+          : undefined;
+    },
+    importPanelPlugin(id) {
+      if (id === TEXT_PLUGIN_ID) return textCatalog.importPanelPlugin(id);
+      if (id !== STAT_PLUGIN_ID) {
+        evidence?.record({ category: 'unknown-plugin', pluginId: '<unsupported>', type: 'failure' });
+        return Promise.reject(new UnsupportedPanelPluginError(id));
+      }
+      if (statPromise) {
+        evidence?.record({ pluginId: STAT_PLUGIN_ID, type: 'cache-hit' });
+        return statPromise;
+      }
+
+      evidence?.record({
+        cache: 'miss',
+        moduleIdentity: STAT_MODULE_IDENTITY,
+        pluginId: STAT_PLUGIN_ID,
+        sourceCategory: 'grafana-application-source',
+        sourceCommit: GRAFANA_SOURCE_COMMIT,
+        strategy: 'P1-direct-source',
+        type: 'start',
+      });
+      statPromise = loadStatPlugin()
+        .then((plugin) => {
+          statPlugin = attachMetadata(plugin, {
+            id: STAT_PLUGIN_ID,
+            module: STAT_MODULE_IDENTITY,
+            name: 'Stat',
+          });
+          evidence?.record({
+            moduleIdentity: STAT_MODULE_IDENTITY,
+            pluginId: STAT_PLUGIN_ID,
+            version: GRAFANA_SOURCE_VERSION,
+            type: 'success',
+          });
+          return statPlugin;
+        })
+        .catch((cause: unknown) => {
+          statPromise = undefined;
+          evidence?.record({
+            category: 'module-load-failed',
+            pluginId: STAT_PLUGIN_ID,
+            type: 'failure',
+          });
+          throw new PanelPluginLoadError(STAT_PLUGIN_ID, { cause });
+        });
+      return statPromise;
     },
   };
 }

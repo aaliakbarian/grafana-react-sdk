@@ -75,9 +75,10 @@ export function installNetworkEvidence(page: Page): NetworkEvidenceCollector {
     const sequence = ++eventSequence;
     enqueue(async () => {
       const body = sanitizeBody(request.postData() ?? undefined);
+      const headers = await request.allHeaders().catch(() => request.headers());
       events.push({
         ...(body === undefined ? {} : { body }),
-        headers: sanitizeHeaders(await request.allHeaders()),
+        headers: sanitizeHeaders(headers),
         id: idFor(request),
         method: request.method(),
         resourceType: request.resourceType(),

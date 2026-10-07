@@ -10,6 +10,10 @@ import type {
   PocPluginImportUtils,
   PocStandardEditorsRegistry,
 } from '../panels/panelCatalog';
+import type {
+  PocFieldConfigProcessors,
+  PocFieldConfigRegistry,
+} from '../registries/installGateBFieldConfig';
 import type { PocRunRequest } from '../query/runRequest';
 
 export const POC_PACKAGE_VERSIONS = {
@@ -60,10 +64,11 @@ interface RuntimeModule {
   setAppEvents(instance: PocEventBus): void;
 }
 
-interface DataModule {
+interface DataModule extends PocFieldConfigProcessors {
   readonly EventBusSrv: new () => PocEventBus;
   readonly ThemeContext: Context<PocTheme>;
   readonly standardEditorsRegistry: PocStandardEditorsRegistry;
+  readonly standardFieldConfigEditorRegistry: PocFieldConfigRegistry;
 }
 
 interface I18nModule {

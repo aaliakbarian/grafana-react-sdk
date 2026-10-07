@@ -4,6 +4,8 @@ export const TEXT_PANEL_ENTRYPOINT =
   'public/app/plugins/panel/text/module.tsx' as const;
 export const TEXT_PANEL_V1_ENTRYPOINT =
   'public/app/plugins/panel/text/v1/module.tsx' as const;
+export const STAT_PANEL_ENTRYPOINT =
+  'public/app/plugins/panel/stat/module.tsx' as const;
 export const TESTDATA_DATASOURCE_ENTRYPOINT =
   'public/app/plugins/datasource/grafana-testdata-datasource/module.tsx' as const;
 

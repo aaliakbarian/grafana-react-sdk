@@ -82,6 +82,7 @@ function createFakeCohort(bootData: unknown) {
   let runRequest: unknown;
   let templateSrv: unknown;
   const standardEditorsRegistry = { setInit: vi.fn() };
+  const standardFieldConfigEditorRegistry = { setInit: vi.fn() };
   class FakeEventBus {
     publish(event: { type?: string }) {
       if (event.type) observedEvents.push(event.type);
@@ -113,7 +114,12 @@ function createFakeCohort(bootData: unknown) {
     data: {
       EventBusSrv: FakeEventBus,
       ThemeContext: createContext(theme),
+      identityOverrideProcessor: vi.fn((value) => value),
       standardEditorsRegistry,
+      standardFieldConfigEditorRegistry,
+      stringOverrideProcessor: vi.fn((value) => value),
+      thresholdsOverrideProcessor: vi.fn((value) => value),
+      valueMappingsOverrideProcessor: vi.fn((value) => value),
     },
     i18n: { initPluginTranslations: vi.fn(async () => ({ language: 'en-US' })) },
     moduleIdentities: {
@@ -162,7 +168,14 @@ function createFakeCohort(bootData: unknown) {
       'react-dom': '19.2.8',
     },
   } as unknown as GrafanaCohort;
-  return { cohort, locationService, observedEvents, standardEditorsRegistry, theme };
+  return {
+    cohort,
+    locationService,
+    observedEvents,
+    standardEditorsRegistry,
+    standardFieldConfigEditorRegistry,
+    theme,
+  };
 }
 
 function hostConfig(overrides: Record<string, unknown> = {}): PocHostConfig {
@@ -395,6 +408,54 @@ describe('POC compatibility runtime coordinator', () => {
         },
       })
     ).rejects.toBeInstanceOf(PocRuntimeConflictError);
+    first.release();
+    second.release();
+  });
+
+  it('installs only the closed Gate B Text and Stat catalogue and required view registries', async () => {
+    const harness = runtimeHarness();
+    const pluginImportUtils = {
+      getPanelPluginFromCache: vi.fn(),
+      importPanelPlugin: vi.fn(),
+    };
+    const config = hostConfig({
+      panelCatalog: {
+        identity: 'gate-b-text-stat-v1',
+        panelIds: ['text', 'stat'],
+        pluginImportUtils,
+      },
+    });
+
+    const first = await harness.coordinator.acquire(config);
+    const second = await harness.coordinator.acquire(config);
+
+    expect(harness.fake.cohort.runtime.getPluginImportUtils()).toBe(pluginImportUtils);
+    expect(harness.fake.standardEditorsRegistry.setInit).toHaveBeenCalledOnce();
+    const optionInitializer = harness.fake.standardEditorsRegistry.setInit.mock.calls[0]?.[0];
+    expect(optionInitializer?.().map((editor: { id: string }) => editor.id)).toEqual([
+      'radio',
+      'select',
+      'boolean',
+      'number',
+      'stats-picker',
+    ]);
+    expect(harness.fake.standardFieldConfigEditorRegistry.setInit).toHaveBeenCalledOnce();
+    const fieldInitializer =
+      harness.fake.standardFieldConfigEditorRegistry.setInit.mock.calls[0]?.[0];
+    expect(fieldInitializer?.().map((editor: { id: string }) => editor.id)).toEqual([
+      'unit',
+      'color',
+      'mappings',
+      'thresholds',
+    ]);
+    expect(harness.coordinator.inspect().initializationSteps).toEqual(
+      expect.arrayContaining([
+        'stat-option-editors-installed',
+        'stat-field-config-installed',
+        'panel-catalog-installed',
+      ])
+    );
+
     first.release();
     second.release();
   });

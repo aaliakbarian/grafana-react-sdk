@@ -27,8 +27,15 @@ function normalizeModuleId(id: string): string {
   const virtualPrefix = 'poc-pinned-grafana-source:';
   if (process.env.GRAFANA_SOURCE_DIR && normalized.startsWith(virtualPrefix)) {
     const sourceRoot = process.env.GRAFANA_SOURCE_DIR.replaceAll('\\', '/').replace(/\/$/, '');
-    const relativeSource = normalized.slice(virtualPrefix.length).replace(/\.js$/, '');
-    return `${sourceRoot}/public/app/plugins/datasource/grafana-testdata-datasource/${relativeSource}`;
+    const virtualSource = normalized.slice(virtualPrefix.length);
+    const separator = virtualSource.indexOf(':');
+    const namespace = separator >= 0 ? virtualSource.slice(0, separator) : 'testdata';
+    const relativeSource = (separator >= 0 ? virtualSource.slice(separator + 1) : virtualSource).replace(/\.js$/, '');
+    const auditedRoot =
+      namespace === 'stat'
+        ? 'public/app/plugins/panel/stat'
+        : 'public/app/plugins/datasource/grafana-testdata-datasource';
+    return `${sourceRoot}/${auditedRoot}/${relativeSource}`;
   }
   return normalized;
 }
@@ -119,7 +126,9 @@ export function classifyForbiddenGrafanaImport(
   ): ForbiddenGrafanaImport => ({ category, id, ...(importer ? { importer } : {}), reason });
 
   if (
-    (id === 'grafana-poc-text-panel' || id === 'grafana-poc-testdata-datasource') &&
+    (id === 'grafana-poc-text-panel' ||
+      id === 'grafana-poc-stat-panel' ||
+      id === 'grafana-poc-testdata-datasource') &&
     !isInsideAllowedSourceBoundary(importer, ['/packages/poc-grafana-bridge/'])
   ) {
     return violation(

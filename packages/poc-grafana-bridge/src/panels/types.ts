@@ -1,6 +1,6 @@
 import type { PanelPlugin } from '@grafana/data';
 
-export type PocPanelPluginId = 'text';
+export type PocPanelPluginId = 'stat' | 'text';
 export type PocPanelPluginLoader = () => Promise<PanelPlugin>;
 
 export type PanelPluginLoadEvent =

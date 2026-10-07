@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, extname, relative, resolve, sep } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 
 import { transformWithOxc, type Plugin } from 'vite';
 
@@ -7,6 +7,7 @@ export interface PinnedGrafanaSourceTransformOptions {
   entryAlias: string;
   entrypoint: string;
   sourceRoot: string;
+  virtualNamespace?: string;
 }
 
 export const PINNED_GRAFANA_SOURCE_VIRTUAL_PREFIX = '\0poc-pinned-grafana-source:';
@@ -25,8 +26,14 @@ export function pinnedGrafanaSourceTransformPlugin(
   options: PinnedGrafanaSourceTransformOptions
 ): Plugin {
   const sourceRoot = resolve(options.sourceRoot).replaceAll('\\', '/').replace(/\/$/, '');
+  if (options.virtualNamespace && !/^[a-z][a-z0-9-]*$/.test(options.virtualNamespace)) {
+    throw new Error('Pinned Grafana source virtual namespace must be a lowercase identifier.');
+  }
+  const virtualPrefix = `${PINNED_GRAFANA_SOURCE_VIRTUAL_PREFIX}${
+    options.virtualNamespace ? `${options.virtualNamespace}:` : ''
+  }`;
   const sourceRootPattern = new RegExp(`^${escapeRegExp(sourceRoot)}/`);
-  const virtualPrefixPattern = new RegExp(`^${escapeRegExp(PINNED_GRAFANA_SOURCE_VIRTUAL_PREFIX)}`);
+  const virtualPrefixPattern = new RegExp(`^${escapeRegExp(virtualPrefix)}`);
   const assertInsideSourceRoot = (file: string) => {
     const absolute = resolve(file).replaceAll('\\', '/');
     if (!sourceRootPattern.test(absolute)) {
@@ -36,14 +43,15 @@ export function pinnedGrafanaSourceTransformPlugin(
   };
   const toVirtualId = (file: string) => {
     const relativePath = relative(sourceRoot, assertInsideSourceRoot(file)).split(sep).join('/');
-    return `${PINNED_GRAFANA_SOURCE_VIRTUAL_PREFIX}${relativePath}.js`;
+    return `${virtualPrefix}${relativePath}.js`;
   };
   const fromVirtualId = (id: string) => {
-    const relativePath = id.slice(PINNED_GRAFANA_SOURCE_VIRTUAL_PREFIX.length).replace(/\.js$/, '');
+    const relativePath = id.slice(virtualPrefix.length).replace(/\.js$/, '');
     return assertInsideSourceRoot(resolve(sourceRoot, relativePath));
   };
   const resolveSourceFile = (candidate: string): string | undefined => {
-    const candidates = extname(candidate)
+    const hasSourceExtension = /\.(?:[cm]?[jt]sx?|json|css)$/i.test(candidate);
+    const candidates = hasSourceExtension
       ? [candidate]
       : [
           candidate,
@@ -68,7 +76,7 @@ export function pinnedGrafanaSourceTransformPlugin(
       if (source === options.entryAlias) {
         return toVirtualId(resolve(sourceRoot, options.entrypoint));
       }
-      if (!importer?.startsWith(PINNED_GRAFANA_SOURCE_VIRTUAL_PREFIX) || !source.startsWith('.')) {
+      if (!importer?.startsWith(virtualPrefix) || !source.startsWith('.')) {
         return null;
       }
       const importingFile = fromVirtualId(importer);
@@ -79,7 +87,7 @@ export function pinnedGrafanaSourceTransformPlugin(
       return toVirtualId(resolved);
     },
     load(id) {
-      if (!id.startsWith(PINNED_GRAFANA_SOURCE_VIRTUAL_PREFIX)) {
+      if (!id.startsWith(virtualPrefix)) {
         return null;
       }
       return readFileSync(fromVirtualId(id), 'utf8');

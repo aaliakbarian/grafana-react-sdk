@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { pinnedGrafanaSourceTransformPlugin } from './pinnedGrafanaSourceTransformPlugin.ts';
@@ -53,5 +56,49 @@ describe('pinned Grafana source transform', () => {
     expect(() =>
       load('\0poc-pinned-grafana-source:../../../../core/secrets.ts.js')
     ).toThrow(/outside the audited source root/i);
+  });
+
+  it('isolates relative imports when two audited source trees use the transform', () => {
+    const stat = pinnedGrafanaSourceTransformPlugin({
+      entryAlias: 'grafana-poc-stat-panel',
+      entrypoint: 'module.tsx',
+      sourceRoot: '/grafana/public/app/plugins/panel/stat',
+      virtualNamespace: 'stat',
+    });
+    const testData = pinnedGrafanaSourceTransformPlugin({
+      entryAlias: 'grafana-poc-testdata-datasource',
+      entrypoint: 'module.tsx',
+      sourceRoot: '/grafana/public/app/plugins/datasource/grafana-testdata-datasource',
+      virtualNamespace: 'testdata',
+    });
+    const statResolve = stat.resolveId as (source: string, importer?: string) => unknown;
+    const testDataResolve = testData.resolveId as (source: string, importer?: string) => unknown;
+
+    const statEntry = statResolve('grafana-poc-stat-panel');
+    expect(statEntry).toBe('\0poc-pinned-grafana-source:stat:module.tsx.js');
+    expect(testDataResolve('./StatPanel', String(statEntry))).toBeNull();
+    expect(statResolve('./datasource', '\0poc-pinned-grafana-source:testdata:module.tsx.js')).toBeNull();
+  });
+
+  it('resolves an extensionless dotted Grafana source import', () => {
+    const sourceRoot = mkdtempSync(join(tmpdir(), 'poc-grafana-source-'));
+    try {
+      writeFileSync(join(sourceRoot, 'module.tsx'), "export * from './panelcfg.gen';");
+      writeFileSync(join(sourceRoot, 'panelcfg.gen.ts'), 'export const options = {};');
+      const plugin = pinnedGrafanaSourceTransformPlugin({
+        entryAlias: 'grafana-poc-stat-panel',
+        entrypoint: 'module.tsx',
+        sourceRoot,
+        virtualNamespace: 'stat',
+      });
+      const resolveId = plugin.resolveId as (source: string, importer?: string) => unknown;
+      const entry = resolveId('grafana-poc-stat-panel');
+
+      expect(resolveId('./panelcfg.gen', String(entry))).toBe(
+        '\0poc-pinned-grafana-source:stat:panelcfg.gen.ts.js'
+      );
+    } finally {
+      rmSync(sourceRoot, { force: true, recursive: true });
+    }
   });
 });

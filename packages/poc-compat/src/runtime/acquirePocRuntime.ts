@@ -25,8 +25,11 @@ import {
 } from '../instrumentation/queryTrace';
 import {
   installGateATextOptionEditors,
+  installGateBPanelOptionEditors,
+  isTextAndStatRuntimePanelCatalog,
   isTextRuntimePanelCatalog,
 } from '../panels/panelCatalog';
+import { installGateBFieldConfig } from '../registries/installGateBFieldConfig';
 import {
   createPocBackendSrv,
   createTransportEvidenceRecorder,
@@ -61,6 +64,8 @@ export type PocRuntimeInitializationStep =
   | 'grafana-cohort-loaded'
   | 'panel-catalog-installed'
   | 'text-option-editors-installed'
+  | 'stat-option-editors-installed'
+  | 'stat-field-config-installed'
   | 'theme-selected'
   | 'i18n-initialized'
   | 'backend-transport-installed'
@@ -183,9 +188,19 @@ export function createPocRuntimeCoordinator(
       });
       recordStep('grafana-cohort-loaded', instrumentation);
 
-      if (isTextRuntimePanelCatalog(config.panelCatalog)) {
-        installGateATextOptionEditors(cohort.data.standardEditorsRegistry);
-        recordStep('text-option-editors-installed', instrumentation);
+      if (
+        isTextRuntimePanelCatalog(config.panelCatalog) ||
+        isTextAndStatRuntimePanelCatalog(config.panelCatalog)
+      ) {
+        if (isTextAndStatRuntimePanelCatalog(config.panelCatalog)) {
+          installGateBPanelOptionEditors(cohort.data.standardEditorsRegistry);
+          recordStep('stat-option-editors-installed', instrumentation);
+          installGateBFieldConfig(cohort.data.standardFieldConfigEditorRegistry, cohort.data);
+          recordStep('stat-field-config-installed', instrumentation);
+        } else {
+          installGateATextOptionEditors(cohort.data.standardEditorsRegistry);
+          recordStep('text-option-editors-installed', instrumentation);
+        }
         cohort.runtime.setPluginImportUtils(config.panelCatalog.pluginImportUtils);
         if (cohort.runtime.getPluginImportUtils() !== config.panelCatalog.pluginImportUtils) {
           throw new Error('Grafana Runtime did not retain the closed Text panel catalogue identity.');
@@ -386,8 +401,10 @@ export function createPocRuntimeCoordinator(
         const samePluginImportBoundary =
           activeConfig?.panelCatalog.panelIds.length === 0
             ? config.panelCatalog.panelIds.length === 0
-            : isTextRuntimePanelCatalog(activeConfig.panelCatalog) &&
-              isTextRuntimePanelCatalog(config.panelCatalog) &&
+            : ((isTextRuntimePanelCatalog(activeConfig.panelCatalog) &&
+                isTextRuntimePanelCatalog(config.panelCatalog)) ||
+                (isTextAndStatRuntimePanelCatalog(activeConfig.panelCatalog) &&
+                  isTextAndStatRuntimePanelCatalog(config.panelCatalog))) &&
               activeConfig.panelCatalog.pluginImportUtils === config.panelCatalog.pluginImportUtils;
         if (fingerprint !== requested.fingerprint || !sameRequestFunction || !samePluginImportBoundary) {
           instrumentation?.record({

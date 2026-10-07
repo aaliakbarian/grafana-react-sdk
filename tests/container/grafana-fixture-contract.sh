@@ -29,4 +29,6 @@ compose exec -T \
 compose run --rm --no-deps \
   -e "POC_GRAFANA_VERIFY_USER=${GRAFANA_ADMIN_USER}" \
   -e "POC_GRAFANA_VERIFY_PASSWORD=${GRAFANA_ADMIN_PASSWORD}" \
-  dev yarn playwright test tests/e2e/grafana-fixture-reference.spec.ts --project=chromium
+  dev yarn playwright test tests/e2e/grafana-fixture-reference.spec.ts \
+    --project=chromium \
+    --output=/tmp/grafana-fixture-reference-results
