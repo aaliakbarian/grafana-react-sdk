@@ -28,10 +28,17 @@ export interface PocTextAndStatRuntimePanelCatalog {
   readonly pluginImportUtils: PocPluginImportUtils;
 }
 
+export interface PocTextStatAndTimeSeriesRuntimePanelCatalog {
+  readonly identity: typeof POC_GATE_C_TEXT_STAT_TIMESERIES_PANEL_CATALOG.identity;
+  readonly panelIds: readonly ['text', 'stat', 'timeseries'];
+  readonly pluginImportUtils: PocPluginImportUtils;
+}
+
 export type PocRuntimePanelCatalog =
   | PocEmptyRuntimePanelCatalog
   | PocTextRuntimePanelCatalog
-  | PocTextAndStatRuntimePanelCatalog;
+  | PocTextAndStatRuntimePanelCatalog
+  | PocTextStatAndTimeSeriesRuntimePanelCatalog;
 
 export const POC_GATE_A_TEXT_PANEL_CATALOG = {
   identity: 'gate-a-text-v1',
@@ -41,6 +48,11 @@ export const POC_GATE_A_TEXT_PANEL_CATALOG = {
 export const POC_GATE_B_TEXT_STAT_PANEL_CATALOG = {
   identity: 'gate-b-text-stat-v1',
   panelIds: ['text', 'stat'],
+} as const satisfies PocPanelCatalog;
+
+export const POC_GATE_C_TEXT_STAT_TIMESERIES_PANEL_CATALOG = {
+  identity: 'gate-c-text-stat-timeseries-v1',
+  panelIds: ['text', 'stat', 'timeseries'],
 } as const satisfies PocPanelCatalog;
 
 function UnavailableViewOnlyOptionEditor() {
@@ -85,5 +97,17 @@ export function isTextAndStatRuntimePanelCatalog(
     catalog.panelIds.length === 2 &&
     catalog.panelIds[0] === 'text' &&
     catalog.panelIds[1] === 'stat'
+  );
+}
+
+export function isTextStatAndTimeSeriesRuntimePanelCatalog(
+  catalog: PocRuntimePanelCatalog
+): catalog is PocTextStatAndTimeSeriesRuntimePanelCatalog {
+  return (
+    catalog.identity === POC_GATE_C_TEXT_STAT_TIMESERIES_PANEL_CATALOG.identity &&
+    catalog.panelIds.length === 3 &&
+    catalog.panelIds[0] === 'text' &&
+    catalog.panelIds[1] === 'stat' &&
+    catalog.panelIds[2] === 'timeseries'
   );
 }

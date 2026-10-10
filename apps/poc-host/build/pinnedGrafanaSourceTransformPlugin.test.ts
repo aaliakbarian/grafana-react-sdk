@@ -101,4 +101,25 @@ describe('pinned Grafana source transform', () => {
       rmSync(sourceRoot, { force: true, recursive: true });
     }
   });
+
+  it('redirects only explicitly reviewed imports in an audited source-built artifact', () => {
+    const plugin = pinnedGrafanaSourceTransformPlugin({
+      entryAlias: 'grafana-poc-timeseries-panel',
+      entrypoint: 'TimeSeriesPanel.tsx',
+      importReplacements: {
+        './plugins/AnnotationsPlugin': '/repo/poc/timeseriesAdapters.tsx',
+      },
+      sourceRoot: '/grafana/public/app/plugins/panel/timeseries',
+      virtualNamespace: 'timeseries',
+    });
+    const resolveId = plugin.resolveId as (source: string, importer?: string) => unknown;
+    const entry = String(resolveId('grafana-poc-timeseries-panel'));
+
+    expect(resolveId('./plugins/AnnotationsPlugin', entry)).toBe(
+      '/repo/poc/timeseriesAdapters.tsx'
+    );
+    expect(() => resolveId('./plugins/OutsideRangePlugin', entry)).toThrow(
+      'Audited Grafana source import could not be resolved'
+    );
+  });
 });

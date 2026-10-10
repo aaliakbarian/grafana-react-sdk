@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { PocScenesModule } from '../config/loadGrafanaCohort';
 import { POC_TASK7_PANEL_CATALOG } from '../dashboard/preflightFixture';
@@ -162,6 +162,25 @@ describe('Task 7 fixture V1 to Scenes conversion', () => {
     expect(panels[2]!.state.$data!.state.transformations).toEqual(originalPanels[2]!.transformations);
     expect(panels[2]!.state.$data!.state.$data).toBeInstanceOf(FakeSceneQueryRunner);
     expect(panels[3]!.state.$data).toBeInstanceOf(FakeSceneQueryRunner);
+  });
+
+  it('uses a runtime-resolved transform operator when the compatibility runtime supplies one', () => {
+    const operator = vi.fn();
+    const resolveGateCTransformation = vi.fn(() => operator);
+    const root = convertFixtureV1ToScene({
+      catalog: POC_TASK7_PANEL_CATALOG,
+      input: fixtureResult(),
+      runtime: { scenes, resolveGateCTransformation },
+    });
+    const panels = root.state.body.state.children.map(
+      (item) => (item as unknown as { state: { body: FakeVizPanel } }).state.body
+    );
+
+    expect(resolveGateCTransformation).toHaveBeenCalledWith({
+      id: 'renameByRegex',
+      options: { regex: '/Raw/', renamePattern: 'Signal' },
+    });
+    expect(panels[2]!.state.$data!.state.transformations).toEqual([operator]);
   });
 
   it('converts the alternate lifecycle dashboard without inventing a data provider', () => {

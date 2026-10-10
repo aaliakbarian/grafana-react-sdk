@@ -1,0 +1,9 @@
+@import 'uplot/dist/uPlot.min.css';
+
+[data-poc-grafana-style-mode='minimum-scoped'] .poc-grafana-dashboard {
+  color-scheme: light;
+}
+
+[data-poc-grafana-style-mode='minimum-scoped'] .poc-grafana-dashboard .uplot {
+  max-width: 100%;
+}

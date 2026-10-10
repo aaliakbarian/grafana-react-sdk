@@ -1,8 +1,10 @@
 import {
   isTextAndStatRuntimePanelCatalog,
   isTextRuntimePanelCatalog,
+  isTextStatAndTimeSeriesRuntimePanelCatalog,
   POC_GATE_A_TEXT_PANEL_CATALOG,
   POC_GATE_B_TEXT_STAT_PANEL_CATALOG,
+  POC_GATE_C_TEXT_STAT_TIMESERIES_PANEL_CATALOG,
   type PocRuntimePanelCatalog,
 } from '../panels/panelCatalog';
 
@@ -126,9 +128,14 @@ export function normalizePocHostConfig(input: PocHostConfig): NormalizedPocHostC
     isTextAndStatRuntimePanelCatalog(input.panelCatalog) &&
     typeof input.panelCatalog.pluginImportUtils?.getPanelPluginFromCache === 'function' &&
     typeof input.panelCatalog.pluginImportUtils?.importPanelPlugin === 'function';
-  if (!emptyCatalog && !textCatalog && !textAndStatCatalog) {
+  const textStatAndTimeSeriesCatalog =
+    Array.isArray(panelIds) &&
+    isTextStatAndTimeSeriesRuntimePanelCatalog(input.panelCatalog) &&
+    typeof input.panelCatalog.pluginImportUtils?.getPanelPluginFromCache === 'function' &&
+    typeof input.panelCatalog.pluginImportUtils?.importPanelPlugin === 'function';
+  if (!emptyCatalog && !textCatalog && !textAndStatCatalog && !textStatAndTimeSeriesCatalog) {
     throw new PocHostConfigError(
-      `Only an empty catalogue, ${POC_GATE_A_TEXT_PANEL_CATALOG.identity}, or ${POC_GATE_B_TEXT_STAT_PANEL_CATALOG.identity} with a closed importer is permitted.`
+      `Only an empty catalogue, ${POC_GATE_A_TEXT_PANEL_CATALOG.identity}, ${POC_GATE_B_TEXT_STAT_PANEL_CATALOG.identity}, or ${POC_GATE_C_TEXT_STAT_TIMESERIES_PANEL_CATALOG.identity} with a closed importer is permitted.`
     );
   }
 
@@ -137,7 +144,13 @@ export function normalizePocHostConfig(input: PocHostConfig): NormalizedPocHostC
     grafanaBasePath: normalizeRelativePath(input.grafanaBasePath, 'grafanaBasePath', false),
     locale: input.locale,
     namespace: input.namespace,
-    panelCatalog: textAndStatCatalog
+    panelCatalog: textStatAndTimeSeriesCatalog
+      ? {
+          identity: POC_GATE_C_TEXT_STAT_TIMESERIES_PANEL_CATALOG.identity,
+          panelIds: ['text', 'stat', 'timeseries'],
+          pluginImportUtils: input.panelCatalog.pluginImportUtils,
+        }
+      : textAndStatCatalog
       ? {
           identity: POC_GATE_B_TEXT_STAT_PANEL_CATALOG.identity,
           panelIds: ['text', 'stat'],

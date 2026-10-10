@@ -5,7 +5,8 @@
   "description": "Disposable private Grafana compatibility research code; never publish.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./poc-panel.css": "./src/theme/poc-panel.css"
   },
   "scripts": {
     "build": "tsc6 -b --pretty false",

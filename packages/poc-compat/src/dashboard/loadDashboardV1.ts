@@ -19,6 +19,7 @@ export function createPocDashboardClient({
   runtimeFingerprint,
 }: CreatePocDashboardClientOptions): PocDashboardClient {
   const discover = createDashboardApiDiscovery(backendSrv, runtimeFingerprint);
+  let requestSequence = 0;
 
   return {
     async loadByUid(uid, options = {}) {
@@ -31,10 +32,11 @@ export function createPocDashboardClient({
       }
 
       const discovery = await discover(options.signal);
+      const requestId = `${runtimeFingerprint}:dashboard:${uid}:${++requestSequence}`;
       const endpoint = `/apis/dashboard.grafana.app/v1/namespaces/${encodeURIComponent(namespace)}/dashboards/${encodeURIComponent(uid)}/dto`;
       let value: unknown;
       try {
-        value = await backendSrv.get<unknown>(endpoint, undefined, `${runtimeFingerprint}:dashboard:${uid}`, {
+        value = await backendSrv.get<unknown>(endpoint, undefined, requestId, {
           abortSignal: options.signal,
         });
       } catch (error: unknown) {

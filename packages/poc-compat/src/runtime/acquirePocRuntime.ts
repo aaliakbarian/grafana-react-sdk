@@ -1,4 +1,5 @@
 import type { BackendSrv } from '@grafana/runtime';
+import type { CustomTransformOperator, DataTransformerConfig } from '@grafana/data';
 
 import type { PocHostConfig, NormalizedPocHostConfig } from '../config/hostConfig';
 import { normalizePocHostConfig } from '../config/hostConfig';
@@ -28,8 +29,14 @@ import {
   installGateBPanelOptionEditors,
   isTextAndStatRuntimePanelCatalog,
   isTextRuntimePanelCatalog,
+  isTextStatAndTimeSeriesRuntimePanelCatalog,
 } from '../panels/panelCatalog';
-import { installGateBFieldConfig } from '../registries/installGateBFieldConfig';
+import {
+  installGateBFieldConfig,
+  installGateCFieldConfig,
+} from '../registries/installGateBFieldConfig';
+import { installGateCTransformers } from '../registries/installTransformers';
+import { requireGateCTransformer } from '../registries/installTransformers';
 import {
   createPocBackendSrv,
   createTransportEvidenceRecorder,
@@ -66,6 +73,8 @@ export type PocRuntimeInitializationStep =
   | 'text-option-editors-installed'
   | 'stat-option-editors-installed'
   | 'stat-field-config-installed'
+  | 'timeseries-field-config-installed'
+  | 'timeseries-transformers-installed'
   | 'theme-selected'
   | 'i18n-initialized'
   | 'backend-transport-installed'
@@ -95,6 +104,9 @@ export interface PocRuntimeLease {
   readonly providerValues: PocGrafanaProviderValues;
   readonly scenes: PocScenesModule;
   readonly transportEvidence: PocTransportEvidenceRecorder;
+  inspectTransformerRegistry(): readonly string[];
+  inspectTransformerExecutions(): number;
+  resolveGateCTransformation(config: DataTransformerConfig): CustomTransformOperator;
   acquireQueryRuntime(options: PocQueryRuntimeOptions): Promise<PocQueryRuntime>;
   acquireDashboardScope(instanceId: string): PocDashboardScope;
   release(): void;
@@ -159,6 +171,7 @@ export function createPocRuntimeCoordinator(
   let queryRuntimePromise: Promise<PocQueryRuntime> | undefined;
   let queryRuntimeLoader: PocQueryRuntimeOptions['loadDataSourceClass'] | undefined;
   let queryRuntimeModuleIdentity: string | undefined;
+  let gateCTransformerExecutions = 0;
 
   const recordStep = (
     step: PocRuntimeInitializationStep,
@@ -190,13 +203,30 @@ export function createPocRuntimeCoordinator(
 
       if (
         isTextRuntimePanelCatalog(config.panelCatalog) ||
-        isTextAndStatRuntimePanelCatalog(config.panelCatalog)
+        isTextAndStatRuntimePanelCatalog(config.panelCatalog) ||
+        isTextStatAndTimeSeriesRuntimePanelCatalog(config.panelCatalog)
       ) {
-        if (isTextAndStatRuntimePanelCatalog(config.panelCatalog)) {
+        if (
+          isTextAndStatRuntimePanelCatalog(config.panelCatalog) ||
+          isTextStatAndTimeSeriesRuntimePanelCatalog(config.panelCatalog)
+        ) {
           installGateBPanelOptionEditors(cohort.data.standardEditorsRegistry);
           recordStep('stat-option-editors-installed', instrumentation);
-          installGateBFieldConfig(cohort.data.standardFieldConfigEditorRegistry, cohort.data);
+          const gateC = isTextStatAndTimeSeriesRuntimePanelCatalog(config.panelCatalog);
+          if (gateC) {
+            installGateCFieldConfig(cohort.data.standardFieldConfigEditorRegistry, cohort.data);
+          } else {
+            installGateBFieldConfig(cohort.data.standardFieldConfigEditorRegistry, cohort.data);
+          }
           recordStep('stat-field-config-installed', instrumentation);
+          if (gateC) {
+            recordStep('timeseries-field-config-installed', instrumentation);
+            installGateCTransformers(
+              cohort.data.standardTransformersRegistry,
+              cohort.data.standardTransformers.renameByRegexTransformer
+            );
+            recordStep('timeseries-transformers-installed', instrumentation);
+          }
         } else {
           installGateATextOptionEditors(cohort.data.standardEditorsRegistry);
           recordStep('text-option-editors-installed', instrumentation);
@@ -301,6 +331,20 @@ export function createPocRuntimeCoordinator(
       providerValues: runtime.providerValues,
       scenes: runtime.cohort.scenes,
       transportEvidence: runtime.transportEvidence,
+      inspectTransformerRegistry: () =>
+        runtime.cohort.data.standardTransformersRegistry.list().map(({ id }) => id),
+      inspectTransformerExecutions: () => gateCTransformerExecutions,
+      resolveGateCTransformation(config) {
+        requireGateCTransformer(config.id);
+        const transformer = runtime.cohort.data.standardTransformers.renameByRegexTransformer;
+        return (context) => {
+          const operator = transformer.operator(config.options, context);
+          return (source) => {
+            gateCTransformerExecutions += 1;
+            return operator(source);
+          };
+        };
+      },
       acquireQueryRuntime(options) {
         if (!active) {
           return Promise.reject(new Error('Cannot acquire query services from a released runtime lease.'));
@@ -404,7 +448,9 @@ export function createPocRuntimeCoordinator(
             : ((isTextRuntimePanelCatalog(activeConfig.panelCatalog) &&
                 isTextRuntimePanelCatalog(config.panelCatalog)) ||
                 (isTextAndStatRuntimePanelCatalog(activeConfig.panelCatalog) &&
-                  isTextAndStatRuntimePanelCatalog(config.panelCatalog))) &&
+                  isTextAndStatRuntimePanelCatalog(config.panelCatalog)) ||
+                (isTextStatAndTimeSeriesRuntimePanelCatalog(activeConfig.panelCatalog) &&
+                  isTextStatAndTimeSeriesRuntimePanelCatalog(config.panelCatalog))) &&
               activeConfig.panelCatalog.pluginImportUtils === config.panelCatalog.pluginImportUtils;
         if (fingerprint !== requested.fingerprint || !sameRequestFunction || !samePluginImportBoundary) {
           instrumentation?.record({

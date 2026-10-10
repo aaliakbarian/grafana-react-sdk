@@ -162,7 +162,11 @@ export async function installResourceEvidence(page: Page): Promise<void> {
     };
 
     const NativeResizeObserver = globalThis.ResizeObserver;
-    const resizeObserverEvents: Array<{ event: 'construct' | 'disconnect' | 'unobserve'; stack?: string }> = [];
+    const resizeObserverEvents: Array<{
+      entries?: number;
+      event: 'construct' | 'delivery' | 'disconnect' | 'unobserve';
+      stack?: string;
+    }> = [];
     if (NativeResizeObserver) {
       const resizeObserverState = new WeakMap<
         ResizeObserver,
@@ -172,7 +176,10 @@ export async function installResourceEvidence(page: Page): Promise<void> {
         constructor(callback: ResizeObserverCallback) {
           // Actual delivery, record identity/order, scheduling, and callback error
           // behavior remain owned by the browser's native observer.
-          super(callback);
+          super((entries, observer) => {
+            resizeObserverEvents.push({ entries: entries.length, event: 'delivery' });
+            callback(entries, observer);
+          });
           resizeObserverEvents.push({
             event: 'construct',
             stack: (new Error('ResizeObserver constructed').stack ?? '<stack unavailable>')

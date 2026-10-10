@@ -218,7 +218,7 @@
         {
           "id": "renameByRegex",
           "options": {
-            "regex": "Raw",
+            "regex": "/Raw/",
             "renamePattern": "Signal"
           }
         }

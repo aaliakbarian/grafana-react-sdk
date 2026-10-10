@@ -48,6 +48,7 @@ function errorCategory(error: unknown): string {
 export function GrafanaDashboard({
   catalog,
   conversionEvidence,
+  instanceId,
   onError,
   onSceneReady,
   runtime,
@@ -58,7 +59,7 @@ export function GrafanaDashboard({
   const [state, setState] = useState<DashboardState>({ status: 'loading' });
 
   useEffect(() => {
-    const scope = runtime.acquireDashboardScope(`task7-${reactId}`);
+    const scope = runtime.acquireDashboardScope(`poc-dashboard-${instanceId ?? reactId}`);
     const generation = lifecycle.current.begin(uid);
     setState({ status: 'loading' });
 
@@ -94,7 +95,7 @@ export function GrafanaDashboard({
       lifecycle.current.cancel();
       scope.release();
     };
-  }, [catalog, conversionEvidence, onError, onSceneReady, reactId, runtime, uid]);
+  }, [catalog, conversionEvidence, instanceId, onError, onSceneReady, reactId, runtime, uid]);
 
   let content: ReactNode;
   if (state.status === 'error') {
@@ -104,6 +105,7 @@ export function GrafanaDashboard({
     content = (
       <div
         className="poc-grafana-dashboard"
+        data-poc-dashboard-instance={instanceId ?? reactId}
         data-poc-dashboard-panel-count={state.scene.state.legacyPanelIds.length}
         data-poc-dashboard-status="rendering"
         data-poc-dashboard-uid={state.scene.state.uid}

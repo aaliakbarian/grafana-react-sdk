@@ -11,6 +11,7 @@ import type { PocRuntimeLease } from '../runtime/acquirePocRuntime';
 export interface ExperimentalGrafanaDashboardProps {
   readonly catalog: PocPanelCatalog;
   readonly conversionEvidence?: PocSceneConversionEvidenceRecorder;
+  readonly instanceId?: string;
   readonly onError?: (error: Error | PocSceneConversionError) => void;
   readonly onSceneReady?: (scene: PocDashboardSceneRoot) => void;
   readonly runtime: PocRuntimeLease;
@@ -20,4 +21,3 @@ export interface ExperimentalGrafanaDashboardProps {
 export type ExperimentalGrafanaDashboardComponent = (
   props: ExperimentalGrafanaDashboardProps
 ) => ReactElement;
-

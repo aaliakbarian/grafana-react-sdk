@@ -1,4 +1,5 @@
 import type { SceneDataProvider, SceneGridItem, VizPanel } from '@grafana/scenes';
+import type { CustomTransformOperator, DataTransformerConfig } from '@grafana/data';
 
 import type { PocScenesModule } from '../config/loadGrafanaCohort';
 import {
@@ -38,7 +39,10 @@ export interface ConvertFixtureV1Options {
   readonly catalog: PocPanelCatalog;
   readonly evidence?: PocSceneConversionEvidenceRecorder;
   readonly input: PocDashboardV1Result;
-  readonly runtime: { readonly scenes: PocScenesModule };
+  readonly runtime: {
+    readonly scenes: PocScenesModule;
+    resolveGateCTransformation?(config: DataTransformerConfig): CustomTransformOperator;
+  };
 }
 
 export interface PocDashboardSceneSnapshot {
@@ -76,7 +80,8 @@ export function createSceneConversionEvidenceRecorder(): PocSceneConversionEvide
 
 function createDataProvider(
   scenes: PocScenesModule,
-  panel: PocFixturePanel
+  panel: PocFixturePanel,
+  resolveGateCTransformation?: (config: DataTransformerConfig) => CustomTransformOperator
 ): SceneDataProvider | undefined {
   if (panel.targets.length === 0) return undefined;
   if (!panel.datasource) {
@@ -93,17 +98,21 @@ function createDataProvider(
     runQueriesMode: 'auto',
   });
   if (panel.transformations.length === 0) return queryRunner;
+  const transformations = resolveGateCTransformation
+    ? panel.transformations.map((config) => resolveGateCTransformation(config))
+    : [...structuredClone(panel.transformations)];
   return new scenes.SceneDataTransformer({
     $data: queryRunner,
-    transformations: [...structuredClone(panel.transformations)],
+    transformations,
   });
 }
 
 function createPanel(
   scenes: PocScenesModule,
-  panel: PocFixturePanel
+  panel: PocFixturePanel,
+  resolveGateCTransformation?: (config: DataTransformerConfig) => CustomTransformOperator
 ): { readonly gridItem: SceneGridItem; readonly vizPanel: VizPanel } {
-  const dataProvider = createDataProvider(scenes, panel);
+  const dataProvider = createDataProvider(scenes, panel, resolveGateCTransformation);
   const vizPanel = new scenes.VizPanel({
     ...(dataProvider ? { $data: dataProvider } : {}),
     ...(panel.description === undefined ? {} : { description: panel.description }),
@@ -130,7 +139,8 @@ function createPanel(
 
 function constructScene(
   dashboard: PocFixtureDashboard,
-  scenes: PocScenesModule
+  scenes: PocScenesModule,
+  resolveGateCTransformation?: (config: DataTransformerConfig) => CustomTransformOperator
 ): PocDashboardSceneRoot {
   const variables = dashboard.variables.map(
     (variable) =>
@@ -143,7 +153,9 @@ function constructScene(
         value: variable.value,
       })
   );
-  const panels = dashboard.panels.map((panel) => createPanel(scenes, panel));
+  const panels = dashboard.panels.map((panel) =>
+    createPanel(scenes, panel, resolveGateCTransformation)
+  );
   const body = new scenes.SceneGridLayout({
     children: panels.map(({ gridItem }) => gridItem),
     isDraggable: false,
@@ -180,7 +192,11 @@ export function convertFixtureV1ToScene({
   const uid = input?.requestedUid ?? '<invalid>';
   try {
     const dashboard = preflightFixtureV1(input, catalog);
-    const root = constructScene(dashboard, runtime.scenes);
+    const root = constructScene(
+      dashboard,
+      runtime.scenes,
+      runtime.resolveGateCTransformation?.bind(runtime)
+    );
     evidence?.record({
       annotationPolicy: dashboard.annotationPolicy,
       layout: 'grid',

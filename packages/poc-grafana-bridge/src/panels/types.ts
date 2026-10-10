@@ -1,6 +1,6 @@
 import type { PanelPlugin } from '@grafana/data';
 
-export type PocPanelPluginId = 'stat' | 'text';
+export type PocPanelPluginId = 'stat' | 'text' | 'timeseries';
 export type PocPanelPluginLoader = () => Promise<PanelPlugin>;
 
 export type PanelPluginLoadEvent =
@@ -10,7 +10,7 @@ export type PanelPluginLoadEvent =
       readonly pluginId: PocPanelPluginId;
       readonly sourceCategory: 'grafana-application-source';
       readonly sourceCommit: string;
-      readonly strategy: 'P1-direct-source';
+      readonly strategy: 'P1-direct-source' | 'P2-source-built-compatibility-artifact';
       readonly type: 'start';
     }
   | { readonly pluginId: PocPanelPluginId; readonly type: 'cache-hit' }

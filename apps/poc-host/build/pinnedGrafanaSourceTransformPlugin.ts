@@ -6,6 +6,7 @@ import { transformWithOxc, type Plugin } from 'vite';
 export interface PinnedGrafanaSourceTransformOptions {
   entryAlias: string;
   entrypoint: string;
+  importReplacements?: Readonly<Record<string, string>>;
   sourceRoot: string;
   virtualNamespace?: string;
 }
@@ -78,6 +79,10 @@ export function pinnedGrafanaSourceTransformPlugin(
       }
       if (!importer?.startsWith(virtualPrefix) || !source.startsWith('.')) {
         return null;
+      }
+      const replacement = options.importReplacements?.[source];
+      if (replacement) {
+        return resolve(replacement);
       }
       const importingFile = fromVirtualId(importer);
       const resolved = resolveSourceFile(resolve(dirname(importingFile), source));

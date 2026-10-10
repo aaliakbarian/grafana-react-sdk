@@ -24,6 +24,8 @@ function evidenceModuleId(id: string, repositoryRoot: string): string {
       const auditedRoot =
         namespace === 'stat'
           ? 'public/app/plugins/panel/stat'
+          : namespace === 'timeseries'
+            ? 'public/app/plugins/panel/timeseries'
           : 'public/app/plugins/datasource/grafana-testdata-datasource';
       return `<grafana-source>/${auditedRoot}/${relativeSource}`;
     }

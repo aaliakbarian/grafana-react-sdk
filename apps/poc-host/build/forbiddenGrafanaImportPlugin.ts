@@ -34,6 +34,8 @@ function normalizeModuleId(id: string): string {
     const auditedRoot =
       namespace === 'stat'
         ? 'public/app/plugins/panel/stat'
+        : namespace === 'timeseries'
+          ? 'public/app/plugins/panel/timeseries'
         : 'public/app/plugins/datasource/grafana-testdata-datasource';
     return `${sourceRoot}/${auditedRoot}/${relativeSource}`;
   }
@@ -128,6 +130,7 @@ export function classifyForbiddenGrafanaImport(
   if (
     (id === 'grafana-poc-text-panel' ||
       id === 'grafana-poc-stat-panel' ||
+      id === 'grafana-poc-timeseries-panel' ||
       id === 'grafana-poc-testdata-datasource') &&
     !isInsideAllowedSourceBoundary(importer, ['/packages/poc-grafana-bridge/'])
   ) {

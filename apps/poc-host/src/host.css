@@ -15,7 +15,7 @@
 
 .poc-host__header,
 .poc-host__sentinel {
-  width: min(880px, 100%);
+  width: min(1280px, 100%);
   margin-inline: auto;
 }
 
@@ -45,11 +45,21 @@
 }
 
 .poc-host__dashboard-boundary {
+  max-width: 100%;
   min-height: 240px;
   margin-block-start: 24px;
   border: 2px dashed #8b96ad;
   border-radius: 8px;
   background: #eef1f7;
+}
+
+.poc-host__dashboard-instances {
+  display: grid;
+  gap: 16px;
+}
+
+.poc-host__dashboard-instances > * {
+  min-width: 0;
 }
 
 .poc-host__gate-controls {

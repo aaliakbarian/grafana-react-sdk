@@ -15,6 +15,8 @@ import type {
   PocFieldConfigRegistry,
 } from '../registries/installGateBFieldConfig';
 import type { PocRunRequest } from '../query/runRequest';
+import type { DataTransformerInfo } from '@grafana/data';
+import type { PocTransformerRegistry } from '../registries/installTransformers';
 
 export const POC_PACKAGE_VERSIONS = {
   '@grafana/data': '13.2.3',
@@ -69,6 +71,10 @@ interface DataModule extends PocFieldConfigProcessors {
   readonly ThemeContext: Context<PocTheme>;
   readonly standardEditorsRegistry: PocStandardEditorsRegistry;
   readonly standardFieldConfigEditorRegistry: PocFieldConfigRegistry;
+  readonly standardTransformers: {
+    readonly renameByRegexTransformer: DataTransformerInfo;
+  };
+  readonly standardTransformersRegistry: PocTransformerRegistry;
 }
 
 interface I18nModule {

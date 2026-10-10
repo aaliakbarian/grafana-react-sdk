@@ -48,12 +48,12 @@ function parseDiscovery(value: unknown): PocDashboardApiDiscovery {
 
 export function createDashboardApiDiscovery(backendSrv: BackendSrv, runtimeFingerprint: string) {
   let successful: PocDashboardApiDiscovery | undefined;
-  let pending: Promise<PocDashboardApiDiscovery> | undefined;
+  let requestSequence = 0;
 
   return async (signal?: AbortSignal): Promise<PocDashboardApiDiscovery> => {
     if (successful) return successful;
-    pending ??= backendSrv
-      .get<unknown>('/apis/dashboard.grafana.app/', undefined, `${runtimeFingerprint}:dashboard-discovery`, {
+    return backendSrv
+      .get<unknown>('/apis/dashboard.grafana.app/', undefined, `${runtimeFingerprint}:dashboard-discovery:${++requestSequence}`, {
         abortSignal: signal,
       })
       .then(parseDiscovery)
@@ -62,10 +62,8 @@ export function createDashboardApiDiscovery(backendSrv: BackendSrv, runtimeFinge
         return result;
       })
       .catch((error: unknown) => {
-        pending = undefined;
         if (error instanceof PocDashboardError) throw error;
         throw dashboardTransportError(error, 'discovery');
       });
-    return pending;
   };
 }

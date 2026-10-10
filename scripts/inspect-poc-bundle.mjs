@@ -26,6 +26,20 @@ const gateBStatSources = [
   '<grafana-source>/public/app/plugins/panel/stat/suggestions.ts',
 ];
 
+// Gate C P2 exact-version source-built compatibility artifact. These are the
+// complete reviewed application-owned Time series/GraphNG renderer sources;
+// every addition requires a new source and licensing checkpoint.
+const gateCTimeSeriesSources = [
+  '<grafana-source>/public/app/core/components/GraphNG/GraphNG.tsx',
+  '<grafana-source>/public/app/core/components/GraphNG/utils.ts',
+  '<grafana-source>/public/app/core/components/TimeSeries/TimeSeries.tsx',
+  '<grafana-source>/public/app/core/components/TimeSeries/utils.ts',
+  '<grafana-source>/public/app/plugins/panel/timeseries/TimeSeriesPanel.tsx',
+  '<grafana-source>/public/app/plugins/panel/timeseries/TimeSeriesTooltip.tsx',
+  '<grafana-source>/public/app/plugins/panel/timeseries/plugins/OutsideRangePlugin.tsx',
+  '<grafana-source>/public/app/plugins/panel/timeseries/utils.ts',
+];
+
 // This list is deliberately exhaustive. A new application-source module must
 // fail inspection until its source and licensing provenance have been reviewed.
 const task10TestDataSources = [
@@ -72,6 +86,7 @@ if (boundary.violations.length > 0) {
 const allowedApplicationSources = new Set([
   ...(process.env.POC_TEXT_PANEL_EXPERIMENT === '1' ? task8TextSources : []),
   ...(process.env.POC_TEXT_PANEL_EXPERIMENT === '1' ? gateBStatSources : []),
+  ...(process.env.POC_TEXT_PANEL_EXPERIMENT === '1' ? gateCTimeSeriesSources : []),
   ...(process.env.POC_TESTDATA_DATASOURCE_EXPERIMENT === '1'
     ? task10TestDataSources
     : []),

@@ -672,3 +672,190 @@ shell, SDK backend, or second React runtime. The duplicate Strict Mode initial
 query, unpublished Stat/Data adapter, application-source licensing boundary,
 large inherited TestData editor closure, and React peer-version mismatch remain
 explicit risks for the Gate C decision.
+
+## Gate C — Time series rendering
+
+**Result: PASS, with an overall POC implication of REVISE.** The controlled
+schema-42 dashboard selected as `grsdk-phase0-poc` renders the real Grafana OSS
+13.2.3 Time series visualization through native React/DOM/canvas. It uses the
+real V1 DTO, constrained Scenes graph, exact TestData frontend datasource,
+`SceneQueryRunner`, `/grafana/api/ds/query`, published Grafana transformation,
+saved field configuration/options, and the exact current Time series/GraphNG
+renderer. No iframe, `GrafanaApp.init`, application route tree, navigation,
+chrome, fabricated `PanelData`, or second React runtime is present.
+
+Gate C proves the core rendering architecture. It does not authorize a
+production SDK design: the bounded P2 application-source artifact, unpublished
+subpath adapters, singleton runtime, large bundle, version lock, peer-version
+mismatch, style choice, and source licensing checkpoint require explicit
+production decisions.
+
+### Panel-loading experiment and source identity
+
+P1 compilation of
+`public/app/plugins/panel/timeseries/module.tsx` stopped at a bounded failure.
+The root module's migration/options closure reaches Grafana dashboard-scene and
+application services that are not needed for view-only rendering. The guard
+was not weakened and those modules were not admitted.
+
+P2 passes with an exact-version, source-built compatibility artifact rooted at
+the unmodified
+`public/app/plugins/panel/timeseries/TimeSeriesPanel.tsx`. It retains the current
+13.2.3 `TimeSeriesPanel`, `TimeSeries`, and `GraphNG` implementations while
+replacing only fixture-absent application integrations for annotations,
+exemplars, assistant actions, ad-hoc filters, status-history actions, and panel
+suggestions with explicit no-op bridge contracts. P3 was not attempted after
+P2 passed.
+
+The exact newly admitted application-source closure at commit
+`6193dc03311b631b9727b560d24369e683dc396e` is:
+
+- `public/app/core/components/GraphNG/GraphNG.tsx`;
+- `public/app/core/components/GraphNG/utils.ts`;
+- `public/app/core/components/TimeSeries/TimeSeries.tsx`;
+- `public/app/core/components/TimeSeries/utils.ts`;
+- `public/app/plugins/panel/timeseries/TimeSeriesPanel.tsx`;
+- `public/app/plugins/panel/timeseries/TimeSeriesTooltip.tsx`;
+- `public/app/plugins/panel/timeseries/plugins/OutsideRangePlugin.tsx`;
+- `public/app/plugins/panel/timeseries/utils.ts`.
+
+The closed catalogue admits exactly `text`, `stat`, and `timeseries`. The first
+Time series load is recorded as a P2 cache miss and success; later compatible
+loads reuse the same `PanelPlugin` identity. Unknown IDs remain rejected and
+there is no SystemJS fallback. The source-built Time series chunk is 20.78 kB
+raw / 8.24 kB gzip.
+
+### Query, transformation, field configuration, and time range
+
+Panel ID 3 completes the required path from DTO to `SceneDataTransformer`,
+inner `SceneQueryRunner`, exact TestData `predictable_pulse`, real HTTP response,
+transformed `PanelData`, and native uPlot canvas. Browser evidence records
+`Loading` then `Done`, a real `/grafana/api/ds/query` request with dashboard UID,
+panel ID, plugin ID, datasource UID/type, and a visible
+`Phase 0 Pulse Signal` legend.
+
+The compatibility runtime registers only the fixture's
+`renameByRegexTransformer`. Unknown transformer IDs fail closed. Scenes 8.13.5
+did not execute the declarative registry lookup across the standalone cohort
+boundary, so the adapter resolves that same published Grafana transformer and
+passes its operator explicitly to `SceneDataTransformer`; it does not modify or
+fabricate frames. The controlled fixture regex was corrected from `Raw` to
+`/Raw/`: Grafana's `stringToJsRegex` anchors a non-delimited value as `^Raw$`,
+which cannot match `Phase 0 Pulse Raw`. The provisioned dashboard was restarted
+and the corrected DTO was verified through the real HTTP path.
+
+The runtime admits only the saved Time series field-config paths required by
+the fixture. Evidence preserves percent unit, absolute 0/100 range, green/red
+thresholds, classic palette, two-pixel line, 15% fill, automatic points,
+linear interpolation/scale, axis placement/color, non-stacked mode, visible
+legend, single-series tooltip, and all remaining controlled custom settings.
+
+The initial request spans one hour. Updating the root `SceneTimeRange` to
+`now-15m` produces a new real query whose numeric `to - from` is approximately
+900,000 ms and updates the rendered plot. Manual refresh produces another
+unique real request and transformed result.
+
+### Resize, interaction, style, and visual evidence
+
+The normal host boundary starts at 1200 px and is reduced to 600 px. The panel
+plot follows from approximately 777 px to less than 600 px after a native
+ResizeObserver delivery. The repaired wrapper records callback delivery and
+delegates the actual resize algorithm to Chromium. A required host containment
+rule sets dashboard-instance grid items to `min-width: 0`; without it, CSS
+Grid's default min-content sizing preserved the 1196 px Scenes grid and caused
+overflow despite correct observer delivery. The observer releases on teardown.
+Legend selection controls are keyboard-focusable, and pointer movement over the
+canvas remains functional without route takeover or Grafana chrome.
+
+All three planned style experiments render:
+
+- `none` proves the renderer does not require Grafana global resets;
+- `full-reference` renders but changes the host sentinel font size from 16 px
+  to 14 px, demonstrating an unacceptable host-global side effect;
+- `minimum-scoped` preserves the host sentinel and is selected for this POC.
+
+The minimum mode supplies the published light theme, Emotion context/style
+nodes, uPlot CSS, and scoped containment rules. No full application stylesheet
+is loaded. Minimum-scoped view-only Time series adds no worker or new font/icon
+request. The diagnostic full-reference mode requests Inter and Roboto only
+through the controlled same-origin `/grafana/public/fonts/` path. The build
+still contains Monaco and Codicon assets inherited from the exact Text/TestData
+source closures; that is an unresolved bundle-composition risk, not a Time
+series view requirement.
+
+Sanitized Chromium screenshots compare the POC panel with panel ID 3 in the
+same provisioned Grafana 13.2.3 dashboard using light theme. Both have the same
+title, one canvas, transformed legend, line/fill plot, axes, and white panel
+background. Grafana full-panel view is 1408 × 890 with a 1390 × 808 plot; the
+POC grid panel is 795 × 372 with a 777 × 293 plot. These 43.5% width and 58.2%
+height differences are expected layout-context differences and are recorded,
+not described as pixel parity. A 120 × 60 normalized sample compares 907
+stable masked background pixels; one differs, or 0.11%, below the 2% threshold.
+Dynamic lines, labels, and antialiasing are masked and separately checked by
+semantic/structural assertions.
+
+### Lifecycle, two instances, and failures
+
+Main → alternate → main UID changes cancel stale Time series requests, prevent
+late `Done` publication, render the alternate Text sentinel, and construct a
+new valid main scene using the cached plugin. Twenty UID changes and twenty
+mount/unmount/remount cycles show no retained instance-owned scene, request,
+subscription, observer, listener, timer, portal, or style ownership.
+
+Two simultaneous dashboards share one runtime and plugin cache while retaining
+two scene graphs, query lifecycles, portal leases, and ResizeObservers.
+Unmounting the secondary instance leaves the primary plot operational and
+reduces observer/resource ownership; unmounting both returns instance-owned
+counts to zero. This test exposed and repaired a Task 6 concurrency defect:
+caller-owned abort signals had been shared by pending discovery/request IDs.
+Discovery now caches only successful results, concurrent consumers use unique
+sanitized request IDs, and aborting one consumer cannot cancel another.
+
+Controlled Time series plugin failure and real TestData HTTP 500 remain local
+to the affected panel. Text and the host sentinel survive. Unit tests cover an
+unsupported transformer, controlled transformer throw, unsupported saved
+options, datasource/module errors, and the existing runtime-conflict boundary.
+
+React 19.2.8 renders the real visualization without runtime, console, page,
+or cleanup errors. The Scenes 8.13.5 React `^18` peer declaration remains an
+unsuppressed installation warning and a production risk.
+
+### Bundle and licensing checkpoint
+
+The final inspector evaluates 9,154 imports, 3,818 bundled modules, 148 chunks,
+and exactly 55 reviewed Grafana application-source files across the inherited
+Text, Stat, TestData, and new Time series closures. It reports zero unauthorized
+application source, zero unresolved Grafana internal-package modules, and zero
+SystemJS modules. The overall emitted bundle remains very large (including
+chunks up to approximately 2.45 MB raw), so this is feasibility evidence, not
+a distribution strategy.
+
+Every one of the eight Time series application files, the two exact compiled
+internal-package bridges, uPlot CSS, Codicon asset, and source-built artifact is
+an explicit licensing and version-coupling checkpoint. No legal conclusion is
+made. Production authorization remains **NO** until licensing and distribution
+review is complete.
+
+Ignored evidence is generated at:
+
+- `artifacts/playwright/gate-c-poc-timeseries.png`;
+- `artifacts/playwright/gate-c-grafana-reference-timeseries.png`;
+- `artifacts/playwright/gate-c-visual-comparison.json`;
+- `apps/poc-host/dist/evidence/bundle-evidence.json`;
+- `apps/poc-host/dist/evidence/forbidden-import-report.json`.
+
+Final container-only verification passed: immutable install retained the four
+expected Scenes/React peer warnings; typecheck passed; 133 unit tests passed;
+the intentionally empty Node integration command passed; all 34 authenticated
+Chromium tests passed; the live Grafana fixture/API/TestData contract passed;
+the production build and exact import/provenance guard passed; generated
+evidence contained no fixture password or unredacted Basic/Bearer credential;
+React and ReactDOM each had one physical 19.2.8 installation; repository
+ownership remained `1001:1002`; and `git diff --check` passed.
+
+**Final POC implication: REVISE.** Gate C passes the mandatory architecture
+proof, and Gate A and Gate B remain green. The next work must review the P2
+source/licensing boundary, replace or productize the bridge intentionally,
+reduce the TestData/editor bundle closure, decide singleton/runtime and style
+contracts, and resolve supported React/version policy. Gate D remains optional
+and was not started.

@@ -13,9 +13,12 @@ export {
 } from './instrumentation/queryTrace';
 export { GrafanaDashboard } from './component/GrafanaDashboard';
 export { PocGrafanaProviders } from './theme/PocGrafanaProviders';
+export { createPocStyleModeManager } from './theme/styleModes';
+export type { PocStyleMode, PocStyleModeManager } from './theme/styleModes';
 export {
   POC_GATE_A_TEXT_PANEL_CATALOG,
   POC_GATE_B_TEXT_STAT_PANEL_CATALOG,
+  POC_GATE_C_TEXT_STAT_TIMESERIES_PANEL_CATALOG,
   type PocPluginImportUtils,
 } from './panels/panelCatalog';
 export {

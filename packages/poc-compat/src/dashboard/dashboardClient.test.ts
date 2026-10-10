@@ -176,7 +176,7 @@ describe('POC dashboard client', () => {
 
     await expect(client.loadByUid('grsdk-phase0-poc')).rejects.toMatchObject({
       code,
-      requestId: 'runtime-a:dashboard:grsdk-phase0-poc',
+      requestId: 'runtime-a:dashboard:grsdk-phase0-poc:1',
       stage: 'dashboard-v1',
       status,
     });
@@ -290,5 +290,36 @@ describe('POC dashboard client', () => {
     expect(JSON.stringify(evidence.snapshot())).not.toMatch(
       /authorization|cookie|password|responseBody/i
     );
+  });
+
+  it('does not let one concurrent consumer abort another instance discovery', async () => {
+    let discoveryCalls = 0;
+    const request = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input).endsWith('/apis/dashboard.grafana.app/')) {
+        discoveryCalls += 1;
+        if (discoveryCalls === 1) {
+          return await new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true }
+            );
+          });
+        }
+        return jsonResponse(discovery);
+      }
+      return jsonResponse(dashboardDto('grsdk-phase0-poc'));
+    });
+    const { client } = createClient(request);
+    const firstController = new AbortController();
+    const first = client.loadByUid('grsdk-phase0-poc', { signal: firstController.signal });
+    const firstResult = first.catch((error: unknown) => error);
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    const second = client.loadByUid('grsdk-phase0-poc');
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    firstController.abort();
+
+    await expect(firstResult).resolves.toMatchObject({ code: 'cancelled', stage: 'discovery' });
+    await expect(second).resolves.toMatchObject({ family: 'v1' });
   });
 });

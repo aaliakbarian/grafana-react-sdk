@@ -83,6 +83,14 @@ function createFakeCohort(bootData: unknown) {
   let templateSrv: unknown;
   const standardEditorsRegistry = { setInit: vi.fn() };
   const standardFieldConfigEditorRegistry = { setInit: vi.fn() };
+  let transformerInitializer: (() => Array<{ id: string }>) | undefined;
+  const standardTransformersRegistry = {
+    getIfExists: vi.fn((id: string) => transformerInitializer?.().find((item) => item.id === id)),
+    list: vi.fn(() => transformerInitializer?.() ?? []),
+    setInit: vi.fn((initializer: typeof transformerInitializer) => {
+      transformerInitializer = initializer;
+    }),
+  };
   class FakeEventBus {
     publish(event: { type?: string }) {
       if (event.type) observedEvents.push(event.type);
@@ -115,8 +123,19 @@ function createFakeCohort(bootData: unknown) {
       EventBusSrv: FakeEventBus,
       ThemeContext: createContext(theme),
       identityOverrideProcessor: vi.fn((value) => value),
+      numberOverrideProcessor: vi.fn((value) => value),
       standardEditorsRegistry,
       standardFieldConfigEditorRegistry,
+      standardTransformers: {
+        renameByRegexTransformer: {
+          defaultOptions: { regex: '(.*)', renamePattern: '$1' },
+          description: 'Rename fields by regex.',
+          id: 'renameByRegex',
+          name: 'Rename fields by regex',
+          operator: vi.fn(() => (source: unknown) => `resolved:${String(source)}`),
+        },
+      },
+      standardTransformersRegistry,
       stringOverrideProcessor: vi.fn((value) => value),
       thresholdsOverrideProcessor: vi.fn((value) => value),
       valueMappingsOverrideProcessor: vi.fn((value) => value),
@@ -174,6 +193,7 @@ function createFakeCohort(bootData: unknown) {
     observedEvents,
     standardEditorsRegistry,
     standardFieldConfigEditorRegistry,
+    standardTransformersRegistry,
     theme,
   };
 }
@@ -458,6 +478,50 @@ describe('POC compatibility runtime coordinator', () => {
 
     first.release();
     second.release();
+  });
+
+  it('installs the closed Gate C catalogue plus the one fixture transformer', async () => {
+    const harness = runtimeHarness();
+    const pluginImportUtils = {
+      getPanelPluginFromCache: vi.fn(),
+      importPanelPlugin: vi.fn(),
+    };
+    const config = hostConfig({
+      panelCatalog: {
+        identity: 'gate-c-text-stat-timeseries-v1',
+        panelIds: ['text', 'stat', 'timeseries'],
+        pluginImportUtils,
+      },
+    });
+
+    const lease = await harness.coordinator.acquire(config);
+
+    expect(harness.fake.cohort.runtime.getPluginImportUtils()).toBe(pluginImportUtils);
+    expect(harness.fake.standardTransformersRegistry.setInit).toHaveBeenCalledOnce();
+    const transformInitializer = harness.fake.standardTransformersRegistry.setInit.mock.calls[0]?.[0];
+    expect(transformInitializer?.().map((transformer: { id: string }) => transformer.id)).toEqual([
+      'renameByRegex',
+    ]);
+    expect(harness.coordinator.inspect().initializationSteps).toEqual(
+      expect.arrayContaining([
+        'stat-option-editors-installed',
+        'stat-field-config-installed',
+        'timeseries-field-config-installed',
+        'timeseries-transformers-installed',
+        'panel-catalog-installed',
+      ])
+    );
+    expect(
+      lease.resolveGateCTransformation({
+        id: 'renameByRegex',
+        options: { regex: '/Raw/', renamePattern: 'Signal' },
+      })({ interpolate: (value: string) => value } as never)('source' as never)
+    ).toBe('resolved:source');
+    expect(() =>
+      lease.resolveGateCTransformation({ id: 'organize', options: {} })
+    ).toThrow('Gate C admits only renameByRegex');
+
+    lease.release();
   });
 
   it.each([

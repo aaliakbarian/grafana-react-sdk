@@ -60,6 +60,20 @@ const reviewedStatSourceFiles = [
   'presets.ts',
   'suggestions.ts',
 ] as const;
+const reviewedTimeSeriesSourceFiles = [
+  'TimeSeriesPanel.tsx',
+  'TimeSeriesTooltip.tsx',
+  'panelcfg.gen.ts',
+  'plugins/OutsideRangePlugin.tsx',
+  'utils.ts',
+] as const;
+const reviewedCurrentTimeSeriesFiles = [
+  'core/components/GraphNG/GraphNG.tsx',
+  'core/components/GraphNG/types.ts',
+  'core/components/GraphNG/utils.ts',
+  'core/components/TimeSeries/TimeSeries.tsx',
+  'core/components/TimeSeries/utils.ts',
+] as const;
 
 function verifyGrafanaSourceCheckout(sourceDir: string): void {
   statSync(resolve(sourceDir, 'public/app/plugins/panel/text/module.tsx'));
@@ -107,6 +121,13 @@ const reviewedSourceFiles = grafanaSourceDir
       ...reviewedStatSourceFiles.map((file) =>
         resolve(grafanaSourceDir, 'public/app/plugins/panel/stat', file)
       ),
+      ...reviewedTimeSeriesSourceFiles.map((file) =>
+        resolve(grafanaSourceDir, 'public/app/plugins/panel/timeseries', file)
+      ),
+      ...reviewedCurrentTimeSeriesFiles.flatMap((file) => {
+        const resolved = resolve(grafanaSourceDir, 'public/app', file);
+        return [resolved, resolved.replace(/\.[^.]+$/, '')];
+      }),
       ...(testDataExperimentEnabled
         ? reviewedTestDataSourceFiles.map((file) =>
             resolve(
@@ -124,6 +145,9 @@ const testDataSourceRoot =
     : undefined;
 const statSourceRoot = grafanaSourceDir
   ? resolve(grafanaSourceDir, 'public/app/plugins/panel/stat')
+  : undefined;
+const timeSeriesSourceRoot = grafanaSourceDir
+  ? resolve(grafanaSourceDir, 'public/app/plugins/panel/timeseries')
   : undefined;
 
 export default defineConfig({
@@ -174,6 +198,38 @@ export default defineConfig({
           }),
         ]
       : []),
+    ...(timeSeriesSourceRoot
+      ? [
+          pinnedGrafanaSourceTransformPlugin({
+            entryAlias: 'grafana-poc-timeseries-panel',
+            entrypoint: 'TimeSeriesPanel.tsx',
+            importReplacements: {
+              './plugins/AnnotationsPlugin': resolve(
+                repositoryRoot,
+                'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+              ),
+              './plugins/ExemplarsPlugin': resolve(
+                repositoryRoot,
+                'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+              ),
+              './plugins/utils': resolve(
+                repositoryRoot,
+                'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+              ),
+              '../status-history/utils': resolve(
+                repositoryRoot,
+                'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+              ),
+              './suggestions': resolve(
+                repositoryRoot,
+                'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+              ),
+            },
+            sourceRoot: timeSeriesSourceRoot,
+            virtualNamespace: 'timeseries',
+          }),
+        ]
+      : []),
     react(),
     bundleEvidencePlugin({ repositoryRoot }),
   ],
@@ -184,7 +240,98 @@ export default defineConfig({
             find: /^@grafana\/data\/internal$/,
             replacement: resolve(
               repositoryRoot,
+              'packages/poc-grafana-bridge/src/internal/grafanaDataInternal.ts'
+            ),
+          },
+          {
+            find: /^@grafana\/ui\/internal$/,
+            replacement: resolve(
+              repositoryRoot,
+              'packages/poc-grafana-bridge/src/internal/grafanaUiInternal.ts'
+            ),
+          },
+          {
+            find: /^app\/core\/components\/AssistantTooltip\/(?:AssistantTooltipButton|buildAssistantContext)$/,
+            replacement: resolve(
+              repositoryRoot,
+              'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+            ),
+          },
+          {
+            find: /^app\/features\/panel\/filters\/adhoc$/,
+            replacement: resolve(
+              repositoryRoot,
+              'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+            ),
+          },
+          {
+            find: /^app\/plugins\/panel\/(?:status-history\/utils|timeseries\/plugins\/utils)$/,
+            replacement: resolve(
+              repositoryRoot,
+              'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+            ),
+          },
+          {
+            find: '../../../plugins/panel/timeseries/plugins/utils',
+            replacement: resolve(
+              repositoryRoot,
+              'packages/poc-grafana-bridge/src/panels/timeseriesAdapters.tsx'
+            ),
+          },
+          {
+            find: 'grafana-poc-ui-uplot-utils',
+            replacement: resolve(
+              repositoryRoot,
+              'node_modules/@grafana/ui/dist/esm/components/uPlot/utils.mjs'
+            ),
+          },
+          {
+            find: 'grafana-poc-ui-gradient-fills',
+            replacement: resolve(
+              repositoryRoot,
+              'node_modules/@grafana/ui/dist/esm/components/uPlot/config/gradientFills.mjs'
+            ),
+          },
+          {
+            find: 'grafana-poc-ui-plot-legend',
+            replacement: resolve(
+              repositoryRoot,
+              'node_modules/@grafana/ui/dist/esm/components/uPlot/PlotLegend.mjs'
+            ),
+          },
+          {
+            find: 'grafana-poc-ui-tooltip-plugin',
+            replacement: resolve(
+              repositoryRoot,
+              'node_modules/@grafana/ui/dist/esm/components/uPlot/plugins/TooltipPlugin2.mjs'
+            ),
+          },
+          {
+            find: 'grafana-poc-data-convert-field-type',
+            replacement: resolve(
+              repositoryRoot,
+              'node_modules/@grafana/data/dist/esm/transformations/transformers/convertFieldType.mjs'
+            ),
+          },
+          {
+            find: 'grafana-poc-data-join-frames',
+            replacement: resolve(
+              repositoryRoot,
+              'node_modules/@grafana/data/dist/esm/transformations/transformers/joinDataFrames.mjs'
+            ),
+          },
+          {
+            find: 'grafana-poc-data-field-overrides',
+            replacement: resolve(
+              repositoryRoot,
               'node_modules/@grafana/data/dist/esm/field/fieldOverrides.mjs'
+            ),
+          },
+          {
+            find: 'grafana-poc-data-null-to-undef',
+            replacement: resolve(
+              grafanaSourceDir,
+              'packages/grafana-data/src/transformations/transformers/nulls/nullToUndefThreshold.ts'
             ),
           },
           { find: 'app', replacement: resolve(grafanaSourceDir, 'public/app') },
@@ -223,6 +370,10 @@ export default defineConfig({
             ),
             task8Text: resolve(repositoryRoot, 'packages/poc-grafana-bridge/src/panels/text.ts'),
             task11Stat: resolve(repositoryRoot, 'packages/poc-grafana-bridge/src/panels/stat.ts'),
+            task12TimeSeries: resolve(
+              repositoryRoot,
+              'packages/poc-grafana-bridge/src/panels/timeseries.ts'
+            ),
             ...(testDataExperimentEnabled
               ? {
                   task10TestData: resolve(

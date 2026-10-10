@@ -5,6 +5,7 @@ import {
   GRAFANA_SOURCE_VERSION,
   STAT_PANEL_ENTRYPOINT,
   TEXT_PANEL_V1_ENTRYPOINT,
+  TIMESERIES_PANEL_P2_IDENTITY,
 } from '../sourceIdentity';
 import type {
   PanelPluginLoadEvidence,
@@ -17,6 +18,8 @@ export const TEXT_PLUGIN_ID = 'text' as const;
 export const TEXT_MODULE_IDENTITY = TEXT_PANEL_V1_ENTRYPOINT;
 export const STAT_PLUGIN_ID = 'stat' as const;
 export const STAT_MODULE_IDENTITY = STAT_PANEL_ENTRYPOINT;
+export const TIMESERIES_PLUGIN_ID = 'timeseries' as const;
+export const TIMESERIES_MODULE_IDENTITY = TIMESERIES_PANEL_P2_IDENTITY;
 
 export class UnsupportedPanelPluginError extends Error {
   readonly code = 'panel-plugin-unsupported';
@@ -42,7 +45,7 @@ export class PanelPluginLoadError extends Error {
 
 function attachMetadata(
   plugin: PanelPlugin,
-  identity: { readonly id: 'stat' | 'text'; readonly module: string; readonly name: string }
+  identity: { readonly id: 'stat' | 'text' | 'timeseries'; readonly module: string; readonly name: string }
 ): PanelPlugin {
   plugin.meta = {
     ...plugin.meta,
@@ -197,6 +200,78 @@ export function createTextAndStatPanelCatalog({
           throw new PanelPluginLoadError(STAT_PLUGIN_ID, { cause });
         });
       return statPromise;
+    },
+  };
+}
+
+export interface CreateTextStatAndTimeSeriesPanelCatalogOptions
+  extends CreateTextAndStatPanelCatalogOptions {
+  readonly loadTimeSeriesPlugin: PocPanelPluginLoader;
+}
+
+export function createTextStatAndTimeSeriesPanelCatalog({
+  evidence,
+  loadStatPlugin,
+  loadTextPlugin,
+  loadTimeSeriesPlugin,
+}: CreateTextStatAndTimeSeriesPanelCatalogOptions): PocPanelPluginCatalog {
+  const inherited = createTextAndStatPanelCatalog({ evidence, loadStatPlugin, loadTextPlugin });
+  let timeseriesPromise: Promise<PanelPlugin> | undefined;
+  let timeseriesPlugin: PanelPlugin | undefined;
+
+  return {
+    getPanelPluginFromCache(id) {
+      return id === TIMESERIES_PLUGIN_ID
+        ? timeseriesPlugin
+        : inherited.getPanelPluginFromCache(id);
+    },
+    importPanelPlugin(id) {
+      if (id === TEXT_PLUGIN_ID || id === STAT_PLUGIN_ID) {
+        return inherited.importPanelPlugin(id);
+      }
+      if (id !== TIMESERIES_PLUGIN_ID) {
+        evidence?.record({ category: 'unknown-plugin', pluginId: '<unsupported>', type: 'failure' });
+        return Promise.reject(new UnsupportedPanelPluginError(id));
+      }
+      if (timeseriesPromise) {
+        evidence?.record({ pluginId: TIMESERIES_PLUGIN_ID, type: 'cache-hit' });
+        return timeseriesPromise;
+      }
+
+      evidence?.record({
+        cache: 'miss',
+        moduleIdentity: TIMESERIES_MODULE_IDENTITY,
+        pluginId: TIMESERIES_PLUGIN_ID,
+        sourceCategory: 'grafana-application-source',
+        sourceCommit: GRAFANA_SOURCE_COMMIT,
+        strategy: 'P2-source-built-compatibility-artifact',
+        type: 'start',
+      });
+      timeseriesPromise = loadTimeSeriesPlugin()
+        .then((plugin) => {
+          timeseriesPlugin = attachMetadata(plugin, {
+            id: TIMESERIES_PLUGIN_ID,
+            module: TIMESERIES_MODULE_IDENTITY,
+            name: 'Time series',
+          });
+          evidence?.record({
+            moduleIdentity: TIMESERIES_MODULE_IDENTITY,
+            pluginId: TIMESERIES_PLUGIN_ID,
+            version: GRAFANA_SOURCE_VERSION,
+            type: 'success',
+          });
+          return timeseriesPlugin;
+        })
+        .catch((cause: unknown) => {
+          timeseriesPromise = undefined;
+          evidence?.record({
+            category: 'module-load-failed',
+            pluginId: TIMESERIES_PLUGIN_ID,
+            type: 'failure',
+          });
+          throw new PanelPluginLoadError(TIMESERIES_PLUGIN_ID, { cause });
+        });
+      return timeseriesPromise;
     },
   };
 }
