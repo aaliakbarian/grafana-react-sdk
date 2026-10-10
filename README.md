@@ -1,59 +1,124 @@
 # Grafana React SDK
 
-> Early-stage project: the SDK has not been implemented or published yet.
+> **Experimental pre-release project.** There is no published npm SDK yet. The
+> current implementation is disposable architecture-POC code, not a supported
+> production SDK.
 
 Render existing Grafana OSS dashboards as native React components.
 
 No iframe.  
-No Grafana application shell.  
-Just Grafana dashboards rendered directly inside your React application.
+No Grafana application shell.
 
-## Overview
+The project explores how a host application can select a Grafana dashboard by
+UID and render it inside its own React interface while retaining ownership of
+navigation, layout, authentication, and product chrome.
 
-`grafana-react-sdk` is intended to become an open-source project for rendering existing Grafana OSS 13 dashboards natively inside React and TypeScript applications. Applications will select a dashboard by UID and render it as part of their own interface.
+## Phase 0 result
+
+**Gate C: PASS**
+
+**Overall Phase 0 decision: REVISE**
+
+The core architectural hypothesis succeeded: native Grafana panel rendering
+without an iframe or the Grafana application shell is viable. The controlled
+POC renders real Grafana OSS 13.2.3 panels through React 19.2.8 without calling
+`GrafanaApp.init`.
+
+`REVISE` does not mean the rendering architecture failed. It means the
+production and distribution architecture requires further work before an SDK
+can be released or supported. See the complete
+[Phase 0 results](docs/architecture/research/poc-results.md).
+
+## What works today
+
+The disposable POC has demonstrated:
+
+- dashboard retrieval by user-facing Grafana UID;
+- stable V1/schema-42 dashboard DTO validation and constrained DTO-to-Scenes
+  conversion;
+- real Grafana Text panel rendering;
+- a real Grafana TestData datasource and query path;
+- real Grafana Stat and Time series rendering from query-backed data;
+- time-range updates and manual refresh;
+- responsive Time series resizing;
+- UID changes, stale-work cancellation, and lifecycle cleanup;
+- two compatible simultaneous dashboard instances sharing one runtime safely;
+  and
+- native React/DOM/canvas rendering with React and ReactDOM 19.2.8, no iframe,
+  no Grafana application shell, and no `GrafanaApp.init`.
+
+The controlled Time series comparison was visually close to the Grafana
+reference, but the project does not claim pixel-perfect parity.
+
+## Current POC boundary
+
+Current support is intentionally constrained to:
+
+- the exact Grafana OSS 13.2.3 baseline;
+- a controlled current-schema V1/schema-42 dashboard fixture;
+- Text, Stat, and Time series panels;
+- the controlled built-in TestData datasource; and
+- selected transformations required by the fixture.
+
+The POC does not establish compatibility with arbitrary panels, plugins,
+datasources, dashboard features, Grafana versions, or V2 dashboards. It is
+evidence for a future SDK architecture, not a general compatibility promise.
+
+## Why REVISE?
+
+The production architecture still needs decisions and validation for:
+
+- licensing and distribution of Grafana application source and assets;
+- productizing or replacing the exact-version application-source bridge;
+- the large bundle and inherited Monaco/editor closure;
+- Grafana Runtime singleton ownership and page-level isolation;
+- React 19 support while Scenes declares React 18 peers;
+- containment of Grafana styling and global resets;
+- exact Grafana-version coupling and upgrade strategy; and
+- a scalable transformation-compatibility strategy.
+
+These are technical and review checkpoints, not legal conclusions.
 
 ## Project boundaries
 
-The SDK is intended to:
+The intended SDK remains frontend-only. The host owns authentication, routing,
+navigation, page chrome, and product-level error handling. The project will not
+ship an SDK backend, reproduce Grafana navigation, or bootstrap the Grafana web
+application shell.
 
-- run entirely in the browser;
-- expose a React-oriented integration surface;
-- load an existing dashboard by Grafana UID;
-- reuse supported Grafana rendering packages where technically viable; and
-- leave application navigation, layout, authentication, and product chrome to the host application.
+## Run the POC
 
-The SDK will not:
+There is no SDK package to install. Contributors can run the private POC
+workspaces, deterministic Grafana fixture, and verification suite through the
+repository's container-first workflow. The host requires only Git, Docker with
+Docker Compose, an editor, and the repository checkout.
 
-- embed dashboards with an iframe;
-- start or reproduce the Grafana web application shell;
-- reproduce Grafana navigation; or
-- ship a backend service.
+See [Local development](docs/development/local-development.md) for setup and
+commands.
 
-These boundaries are project decisions. The exact package integrations and public API remain subjects of research and proof-of-concept work.
+## Documentation and tracking
 
-## Status
-
-The repository is in its foundation and research phase. It currently contains project documentation only: no source code, package manifest, installable artifact, or supported API exists yet.
-
-The first technical milestone is a rendering proof of concept against Grafana OSS 13. See the [roadmap](docs/project/roadmap.md) and [POC plan](docs/architecture/research/grafana-rendering-poc.md).
-
-## Documentation
-
+- [Phase 0 results](docs/architecture/research/poc-results.md)
+- [Standalone rendering POC design](docs/architecture/research/grafana-rendering-poc.md)
+- [POC implementation plan](docs/development/poc-implementation-plan.md)
+- [Local development](docs/development/local-development.md)
 - [Project context](docs/project/project-context.md)
 - [Vision](docs/project/vision.md)
 - [Roadmap](docs/project/roadmap.md)
-- [Development workflow](docs/project/development-workflow.md)
-- [Architecture overview](docs/architecture/architecture-overview.md)
-- [Architecture decisions](docs/architecture/decisions/)
-- [Research notes](docs/architecture/research/)
-- [Local development](docs/development/local-development.md)
+- [Phase 0 GitHub milestone](https://github.com/aaliakbarian/grafana-react-sdk/milestone/1)
+- [Grafana React SDK Roadmap project](https://github.com/users/aaliakbarian/projects/1)
 
 ## Contributing
 
-The project is not ready for implementation contributions yet, but research, use cases, and corrections to the documentation are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a change and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+All current packages are private research workspaces and must not be published.
+Read [CONTRIBUTING.md](CONTRIBUTING.md), the
+[development workflow](docs/project/development-workflow.md), and the
+[Code of Conduct](CODE_OF_CONDUCT.md) before proposing a change.
 
 ## License
 
-No open-source license has been selected yet. The current [LICENSE](LICENSE) file is a placeholder; until it is replaced, no license permission is granted.
+No open-source license has been selected yet. The current [LICENSE](LICENSE)
+file is a placeholder; until it is replaced, no license permission is granted.
 
-Grafana is a trademark of Grafana Labs. This project is independent and is not endorsed by or affiliated with Grafana Labs.
+Grafana is a trademark of Grafana Labs. This project is independent and is not
+endorsed by or affiliated with Grafana Labs.
