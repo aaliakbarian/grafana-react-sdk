@@ -1,52 +1,99 @@
 # Roadmap
 
-This roadmap is ordered by evidence and capability, not by calendar date. Scope and sequencing may change as research resolves technical risks.
+The canonical source for project phase names, numbering, goals, and completion
+criteria is this roadmap. GitHub milestones and the Grafana React SDK Roadmap
+project track execution and status against this roadmap.
 
-## Phase 0: Repository foundation
+This roadmap is ordered by evidence and capability, not by calendar date.
+Detailed workstream and task status belongs in GitHub issues and the
+[Grafana React SDK Roadmap project](https://github.com/users/aaliakbarian/projects/1),
+not in this document.
 
-- Establish project objective, constraints, contribution guidance, and conduct policy.
-- Record initial architecture decisions.
-- Define research questions and the rendering proof of concept.
-- Select an open-source license before accepting implementation contributions.
+## Foundation — COMPLETE
 
-## Phase 1: Grafana integration research
+Goal: establish the repository and project-control foundation needed for open
+development.
 
-- Evaluate Grafana Scenes for external dashboard rendering.
-- Inventory relevant Grafana OSS 13 frontend packages and their support status.
-- Identify assumptions about the Grafana shell, global services, CSS, themes, and bundling.
-- Document authentication, CORS, API, plugin, and data-source request constraints.
-- Record reproducible findings and update architecture decisions where needed.
+- Repository setup.
+- Contribution and code-of-conduct foundation.
+- Initial architecture documentation.
+- Initial architecture decision records (ADRs).
 
-## Phase 2: Rendering proof of concept
+## Phase 0 — Architecture Research and Native Rendering POC — COMPLETE
 
-- Load one existing dashboard by UID.
-- Render a deliberately small matrix of representative built-in panels.
-- Exercise time range, template variables, refresh, resize, and cleanup.
-- Demonstrate operation without an iframe, Grafana shell, or SDK backend.
-- Measure bundle impact and record unsupported behavior.
-- Make a proceed, revise, or stop decision based on explicit exit criteria.
+Goal: determine whether existing Grafana dashboards can render natively in an
+independent React host without an iframe or the Grafana application shell.
 
-## Phase 3: SDK foundation
+- Investigated Grafana OSS 13.2.3 source and package behavior.
+- Investigated Scenes, Data, UI, Runtime, and dashboard APIs.
+- Built a standalone compatibility runtime.
+- Retrieved dashboards by user-facing Grafana UID.
+- Converted the controlled current-schema V1/schema-42 subset to Scenes.
+- Gate A — Text: **PASS**.
+- Real TestData query runtime: **PASS**.
+- Gate B — Stat: **PASS**.
+- Gate C — Time series: **PASS**.
+- Final Phase 0 decision: **REVISE**.
 
-- Select package tooling and create the TypeScript/React package structure.
-- Define the smallest public API supported by POC evidence.
-- Introduce compatibility adapters, test fixtures, and automated checks.
-- Establish error, loading, cancellation, and lifecycle contracts.
-- Publish an experimental release for controlled evaluation.
+Gate C proved the core native-rendering hypothesis. `REVISE` means the
+production and distribution architecture needs further work; it does not mean
+the rendering architecture failed. See the
+[Phase 0 results](../architecture/research/poc-results.md).
 
-## Phase 4: Alpha and compatibility expansion
+## Phase 1 — Production Architecture and Distribution Strategy — CURRENT
 
-- Expand the supported dashboard and panel matrix.
-- Add theming and host-integration guidance.
-- Test representative Grafana deployment and authentication patterns.
-- Add examples, diagnostics, migration notes, and semantic versioning policy.
+Goal: turn the Phase 0 evidence into an approved, supportable production
+architecture and distribution strategy.
 
-## Phase 5: Stable release
+- Resolve Grafana source licensing and distribution requirements.
+- Define how the bounded application-source bridge can be productized or
+  replaced.
+- Establish the supported Grafana version and compatibility policy.
+- Define Runtime ownership and isolation.
+- Establish the supported React and Scenes combination.
+- Reduce and govern bundle size.
+- Select a styling-containment strategy.
+- Define the transformation-compatibility strategy.
+- Make the final production-architecture approval decision.
 
-- Publish a supported compatibility matrix and maintenance policy.
-- Complete API, security, accessibility, and operational reviews.
-- Document upgrade paths and known limitations.
-- Release a stable package only when compatibility claims are backed by automated and manual validation.
+## Phase 2 — SDK Foundation and Experimental Package — FUTURE
+
+Goal: implement the first production-oriented SDK foundation from approved
+Phase 1 decisions.
+
+- Establish the production package and workspace structure.
+- Define the public API.
+- Provide the supported dashboard component.
+- Implement adapters based on Phase 1 decisions.
+- Add automated compatibility testing.
+- Publish the first experimental npm release.
+
+## Phase 3 — Alpha and Compatibility Expansion — FUTURE
+
+Goal: expand tested compatibility and document supported integration patterns.
+
+- Add supported panels, datasources, and dashboard features.
+- Document deployment and authentication patterns.
+- Expand theming and host-integration support.
+- Publish a tested compatibility matrix.
+- Provide migration and versioning guidance.
+
+## Phase 4 — Stable Release — FUTURE
+
+Goal: release a stable SDK only when its compatibility and support claims are
+backed by evidence.
+
+- Stabilize the public API.
+- Document maintenance and support policy.
+- Complete security, accessibility, and operational reviews.
+- Back stable compatibility claims with automated and manual tests.
+
+## Historical numbering note
+
+The original roadmap separated repository foundation, integration research,
+and the rendering POC into three numbered phases. Those activities were
+completed together before the public milestone model was finalized. The
+Foundation plus Phase 0–4 numbering in this document is canonical from now on.
 
 ## Out of scope until separately approved
 

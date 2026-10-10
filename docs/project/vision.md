@@ -26,6 +26,20 @@ The host owns routing, navigation, page chrome, authentication decisions, and pr
 
 Supported Grafana versions, dashboard features, panel types, and plugin assumptions should be published as a compatibility contract. Unsupported behavior should fail clearly rather than degrade invisibly.
 
+## Current validation status
+
+- Phase 0 proved the core native-rendering hypothesis with a controlled Grafana
+  OSS 13.2.3 POC.
+- Gate C passed. The overall Phase 0 decision is **REVISE**, not failure:
+  native rendering is viable, while the production and distribution
+  architecture still requires work.
+- Phase 1 — Production Architecture and Distribution Strategy is determining
+  the architecture, compatibility, and distribution model that may support a
+  production SDK.
+
+The POC evidence is intentionally constrained and is not a general Grafana
+compatibility claim or a supported production release.
+
 ## Non-goals
 
 The project does not aim to:
@@ -39,4 +53,8 @@ The project does not aim to:
 
 ## Long-term outcome
 
-The desired outcome is a focused, versioned React SDK with a documented integration surface, a tested Grafana compatibility matrix, examples, and migration guidance. That outcome depends on evidence from the research and POC phases; the architecture may change when those findings are recorded.
+The desired outcome remains a focused, versioned React SDK with a documented
+integration surface, a tested Grafana compatibility matrix, examples, and
+migration guidance. Phase 0 established that the core native-rendering approach
+is feasible. Phase 1 now uses that evidence to select a production architecture
+and distribution model before SDK implementation and release work begins.

@@ -23,24 +23,70 @@ Create a React and TypeScript SDK that renders an existing Grafana OSS 13 dashbo
 - Dashboard selection by UID.
 - Prefer Grafana's native rendering packages where technically possible.
 
-## Working assumptions
+## Proven Phase 0 evidence
 
-These assumptions require proof before becoming commitments:
+Within the controlled Grafana OSS 13.2.3 POC boundary, Phase 0 proved that:
 
-- A host application can provide connectivity and authorization to the necessary Grafana HTTP APIs.
-- Required Grafana packages can run outside the Grafana application shell with an acceptable compatibility layer.
-- Dashboard definitions can be loaded and adapted without rebuilding Grafana's full frontend runtime.
-- CSS, themes, global services, and package versions can be isolated well enough for normal React applications.
+- Native Grafana panel rendering without an iframe or Grafana application shell
+  is feasible.
+- Dashboard retrieval by user-facing Grafana UID works through the browser
+  transport boundary.
+- Constrained current-schema V1/schema-42 dashboard-to-Scenes conversion works.
+- Real Grafana Text, Stat, and Time series panels render natively.
+- Real TestData datasource query execution reaches Grafana and produces
+  `PanelData` through `SceneQueryRunner`.
+- React and ReactDOM 19.2.8 work in the tested combination with
+  `@grafana/scenes@8.13.5`.
+- Multiple compatible dashboards can share one process-wide compatibility
+  runtime while retaining independent scene and query lifecycles.
+
+These results prove the core architectural hypothesis only within the
+controlled POC. They do not imply general compatibility with arbitrary Grafana
+versions, dashboards, panels, plugins, datasources, transformations, or V2
+dashboard schemas.
+
+## Current production assumptions requiring Phase 1 decisions
+
+Phase 1 must test and turn these assumptions into explicit production
+decisions:
+
+- Grafana application source and assets can be used through a legally and
+  operationally acceptable distribution model.
+- The bounded POC bridge can be replaced or productized without importing an
+  uncontrolled portion of the Grafana application.
+- Exact-version coupling can become a documented and testable Grafana support
+  policy.
+- Grafana Runtime singletons can be owned and isolated predictably within a
+  host page.
+- The React and Scenes version relationship can be supported rather than only
+  observed in one POC combination.
+- Bundle size, styles, global state, and transformations can be bounded without
+  losing the required Grafana behavior.
 
 ## Open questions
 
-- Which Grafana OSS 13 frontend packages are supported for external consumption?
-- Can Grafana Scenes represent and render all dashboard features needed for the first release?
-- Which Grafana runtime services must be supplied or replaced?
-- How will data-source proxy calls, authentication, CORS, and request cancellation work in each deployment model?
-- What subset of panels, variables, transformations, annotations, and time controls defines initial compatibility?
-- What versioning policy can accurately communicate compatibility with Grafana releases and plugins?
+- What licensing and distribution model is acceptable for required Grafana
+  application source and assets?
+- What is the production bridge boundary, and how will its exact source closure
+  be built, audited, and upgraded?
+- Which Grafana versions will be supported, and how will compatibility be
+  tested and communicated?
+- What page-level ownership and isolation policy is required for Runtime
+  singletons and multiple SDK consumers?
+- Which React and Scenes versions form a supported combination?
+- What bundle-size budget and reduction strategy are viable?
+- How will Grafana styling and global resets be contained within host
+  applications?
+- Which transformations will be supported, and how will their registry and
+  compatibility be maintained?
+- Which additional panels, datasources, dashboard features, and V2 schemas
+  belong in the supported compatibility contract?
 
 ## Definition of success
 
-The project succeeds when a React application can render a supported existing dashboard by UID, with documented compatibility and predictable lifecycle behavior, while the host retains control of navigation and product chrome. The proof of concept must establish that this is feasible before the public SDK API is designed.
+The project succeeds when a React application can render a supported existing
+dashboard by UID, with documented compatibility and predictable lifecycle
+behavior, while the host retains control of navigation and product chrome.
+Phase 0 established technical feasibility for the controlled POC. Production
+success now requires Phase 1 architecture and distribution approval followed
+by an SDK whose published compatibility claims are backed by tests.
